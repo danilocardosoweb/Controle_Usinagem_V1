@@ -454,9 +454,12 @@ const ExpUsinagem = () => {
       })
       .filter((item) => item !== null)
       .filter((item) =>
-        // Ocultar itens já no fluxo
+        // Ocultar itens já no fluxo (verifica por pedido_id E por pedido_seq)
         !fluxoPedidos.some(
-          (fluxo) => fluxo.pedido_id === item.pedido_id || fluxo.pedido_seq === item.pedidoSeq
+          (fluxo) => 
+            fluxo.pedido_id === item.pedido_id || 
+            String(fluxo.pedido_seq) === String(item.pedidoSeq) ||
+            String(fluxo.pedido) === String(item.pedidoSeq)
         )
       )
       // Remover duplicados por pedidoSeq
@@ -632,8 +635,11 @@ const ExpUsinagem = () => {
   const importadosDisponiveis = useMemo(() => {
     if (!Array.isArray(importados)) return []
     const list = importados
-      // Ocultar já no fluxo
-      .filter((item) => !fluxoPedidos.some((fluxo) => fluxo.importado_id === item.id))
+      // Ocultar já no fluxo (verifica por importado_id E por pedido_seq)
+      .filter((item) => !fluxoPedidos.some((fluxo) => 
+        fluxo.importado_id === item.id || 
+        String(fluxo.pedido_seq) === String(item.pedido)
+      ))
       .map((item) => {
         const base = buildPedidoBase(
           {
