@@ -1,11 +1,12 @@
 # Log de Alterações
 
-[18/11/2025 13:40] - [Refatoração Fase 1] - [Extraído ApontamentoModal + Feature Flags] - [Cascade]
-- Criado sistema de feature flags (frontend/src/config/refactorFlags.js) para refatoração segura
-- Extraído ApontamentoModal.jsx (227 linhas) do ExpUsinagem.jsx para componente separado
-- Modal integrado com feature flag USE_NEW_APONTAMENTO_MODAL (ativado)
-- Build testado - compilação bem-sucedida
-- Código antigo mantido como fallback para rollback seguro
+[18/11/2025 13:50] - [Refatoração Fases 0-2] - [Progresso: 30% concluído] - [Cascade]
+- FASE 0: Branch refactor/exp-usinagem-safe criada + snapshot + estrutura de pastas
+- FASE 1: ApontamentoModal.jsx extraído (227 linhas) com feature flag USE_NEW_APONTAMENTO_MODAL
+- FASE 2: Funções utilitárias em utils/apontamentosLogic.js (234 linhas de lógica pura)
+- Documento STATUS_REFATORACAO.md criado para acompanhamento detalhado
+- Build testado - compilação 100% funcional
+- Código original mantido como fallback para segurança
 
 [18/11/2025 09:05] - [Frontend] - [EXP - Usinagem: Ajustes fluxo Alúnica e lotes] - [Cascade]
 - Ajustado `status_atual`/`status_novo` para `finalizado` ao concluir transferência, eliminando erro de constraint
