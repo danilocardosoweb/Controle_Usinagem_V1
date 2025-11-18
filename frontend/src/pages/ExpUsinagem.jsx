@@ -56,7 +56,9 @@ import {
   parseDadosOriginais,
   exportResumoExcel,
   toDecimal,
-  toIntegerRound
+  toIntegerRound,
+  calcularDuracaoTotal,
+  formatarDuracao
 } from '../utils/expUsinagem'
 
 const toLocalDateTimeInput = (value) => {
@@ -1205,6 +1207,11 @@ const ExpUsinagem = () => {
       const saldoDataRaw = raw?.saldo_atualizado_em || raw?.atualizado_em || raw?.movimentado_em || null
       const apontadoDataBr = saldoDataRaw ? formatDateBR(saldoDataRaw) : null
 
+      // Calcular duração total dos apontamentos deste pedido
+      const apontamentosPedido = apontByFluxo[id] || []
+      const duracaoMinutos = calcularDuracaoTotal(apontamentosPedido)
+      const duracaoFormatada = formatarDuracao(duracaoMinutos)
+
       const basePedido = {
         ...pedido,
         apontadoPcNumber: apontadoPcNum,
@@ -1212,7 +1219,8 @@ const ExpUsinagem = () => {
         apontadoPc: formatInteger(apontadoPcNum),
         apontadoPercent: percent,
         apontadoDataBr,
-        finalizado: estaFinalizado
+        finalizado: estaFinalizado,
+        duracaoFormatada
       }
 
       const agrupadosInspecao = summarizeApontamentos(id, ['para-inspecao'])
@@ -2099,6 +2107,27 @@ const ExpUsinagem = () => {
             className={getButtonClasses('primary')}
             disabled={isLoading}
             title="Registrar Apontamento"
+          >
+            <FaPlay className="h-3.5 w-3.5" />
+          </button>
+        )}
+        
+        {/* Botão Apontar para estágio para-embarque (Embalagem) */}
+        {stageKey === 'para-embarque' && !pedidoCtx.finalizado && (
+          <button
+            type="button"
+            onClick={() => {
+              if (REFACTOR.USE_APONTAMENTO_HOOK && apontamentoHook) {
+                apontamentoHook.openModal(pedidoCtx.id, stageKey);
+              } else {
+                setAlunicaApontPedido(pedidoCtx)
+                setAlunicaApontStage(stageKey)
+                setAlunicaApontOpen(true)
+              }
+            }}
+            className={getButtonClasses('primary')}
+            disabled={isLoading}
+            title="Registrar Apontamento de Embalagem"
           >
             <FaPlay className="h-3.5 w-3.5" />
           </button>

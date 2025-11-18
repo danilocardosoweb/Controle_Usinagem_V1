@@ -288,14 +288,15 @@ export const useApontamentoModal = ({
 
       // Cria apontamentos
       if (pcsInspecao > 0) {
-        apontamentosToInsert.push({
+        const payloadInspecao = {
           ...basePayloadApont,
-          lote: loteCodigo,
+          exp_fluxo_id: String(pedido.id),
+          exp_unidade: 'alunica',
+          exp_stage: 'para-inspecao',
           quantidade: pcsInspecao,
-          quantidade_kg: kgPorPc ? +(pcsInspecao * kgPorPc).toFixed(3) : 0,
-          pedido_pc_total: totalPcPedido,
-          exp_stage: 'para-inspecao'
-        });
+          lote: loteCodigo
+        };
+        apontamentosToInsert.push(payloadInspecao);
       }
 
       if (pcsEmbalar > 0) {
@@ -303,8 +304,6 @@ export const useApontamentoModal = ({
           ...basePayloadApont,
           lote: loteCodigo,
           quantidade: pcsEmbalar,
-          quantidade_kg: kgPorPc ? +(pcsEmbalar * kgPorPc).toFixed(3) : 0,
-          pedido_pc_total: totalPcPedido,
           exp_stage: 'para-embarque'
         });
       }

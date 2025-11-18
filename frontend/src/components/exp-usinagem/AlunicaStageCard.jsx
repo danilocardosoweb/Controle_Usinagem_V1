@@ -9,6 +9,7 @@ const TABLE_HEADERS_DEFAULT = [
   'Ferramenta',
   'Kg',
   'Pc',
+  'Duração',
   'Ações'
 ]
 
@@ -85,6 +86,11 @@ const AlunicaStageCard = ({ status, orders, renderActions, renderDetails, compac
                       </div>
                     )}
                   </td>
+                  <td className={`${compact ? 'py-1.5' : 'py-2'} pr-3 text-center`}>
+                    <div className="text-sm font-medium text-gray-700">
+                      {pedido.duracaoFormatada || '—'}
+                    </div>
+                  </td>
                   <td className={`${compact ? 'py-1.5' : 'py-2'} pr-3`}>
                     <div className="flex items-center gap-2 flex-wrap">
                       {renderActions ? renderActions(pedido) : null}
@@ -93,7 +99,7 @@ const AlunicaStageCard = ({ status, orders, renderActions, renderDetails, compac
                 </tr>
                 {renderDetails ? (
                   <tr>
-                    <td colSpan={9} className="bg-purple-50/30 px-3 pb-3">
+                    <td colSpan={10} className="bg-purple-50/30 px-3 pb-3">
                       {renderDetails(pedido)}
                     </td>
                   </tr>

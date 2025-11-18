@@ -526,3 +526,52 @@ export const parseDadosOriginais = (pedido) => {
     return null
   }
 }
+
+/**
+ * Calcula a duração total de trabalho em minutos a partir de apontamentos
+ * @param {Array} apontamentos - Array de apontamentos com campos inicio e fim
+ * @returns {number} - Total de minutos trabalhados
+ */
+export const calcularDuracaoTotal = (apontamentos) => {
+  if (!Array.isArray(apontamentos) || apontamentos.length === 0) {
+    return 0
+  }
+
+  let totalMinutos = 0
+  
+  apontamentos.forEach(apont => {
+    if (apont.inicio && apont.fim) {
+      try {
+        const inicio = new Date(apont.inicio)
+        const fim = new Date(apont.fim)
+        const diffMs = fim - inicio
+        const diffMin = Math.max(0, diffMs / (1000 * 60))
+        totalMinutos += diffMin
+      } catch (e) {
+        console.warn('Erro ao calcular duração:', e)
+      }
+    }
+  })
+
+  return totalMinutos
+}
+
+/**
+ * Formata minutos em formato legível (Ex: "2h 30m" ou "45m")
+ * @param {number} minutos - Total de minutos
+ * @returns {string} - Duração formatada
+ */
+export const formatarDuracao = (minutos) => {
+  if (!minutos || minutos <= 0) return '—'
+  
+  const horas = Math.floor(minutos / 60)
+  const mins = Math.round(minutos % 60)
+  
+  if (horas > 0 && mins > 0) {
+    return `${horas}h ${mins}m`
+  } else if (horas > 0) {
+    return `${horas}h`
+  } else {
+    return `${mins}m`
+  }
+}
