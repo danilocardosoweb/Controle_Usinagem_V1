@@ -206,26 +206,43 @@ Extraído até agora:           -1.000 linhas (3 modais + 2 hooks)
 
 ---
 
-## 🎯 PRÓXIMOS PASSOS RECOMENDADOS
+## 🎯 RECOMENDAÇÃO: VALIDAR ANTES DE CONTINUAR
 
-### Opção A: TESTAR E VALIDAR O QUE FOI FEITO
-1. Iniciar aplicação: `npm run dev`
-2. Ir para aba Alúnica
-3. Testar **ApontamentoModal** (botão Apontar)
-4. Testar **AprovarModal** (botão Aprovar em pedidos na inspeção)
-5. Testar **ReabrirModal** (botão Reabrir em pedidos na embalagem)
-6. Verificar se todas operações salvam corretamente
-7. Ativar flag `USE_APONTAMENTO_HOOK` e validar comportamento idêntico
-5. ✅ Se funcionar → Continuar refatoração
-6. ❌ Se quebrar → Ajustar antes de prosseguir
+⚠️ **IMPORTANTE:** Com 70% da refatoração concluída e 1.928 linhas de código novo criado, é **CRÍTICO** validar tudo antes de prosseguir.
 
-### Opção B: CONTINUAR REFATORAÇÃO
-1. Criar hook `useApontamentoModal.js` (4h estimadas)
-2. Integrar hook no ExpUsinagem.jsx
-3. Testar novamente
-4. Extrair próximos modais
+### 📋 Guia Completo de Validação
+Criado: `docs/GUIA_VALIDACAO_REFATORACAO.md`
 
-### Opção C: CONSOLIDAR ANTES DE CONTINUAR
+**Contém:**
+- ✅ Checklist detalhado de todos os componentes
+- ✅ Testes passo a passo para cada modal
+- ✅ Instruções para ativar/desativar flags
+- ✅ Template de relatório de testes
+- ✅ Comandos de rollback rápido
+- ✅ Sinais de alerta e troubleshooting
+
+### Ordem de Validação Recomendada:
+1. **Testar Modais** (flags já ativas):
+   - ApontamentoModal
+   - AprovarModal
+   - ReabrirModal
+
+2. **Ativar e Testar Hooks** (um por vez):
+   - `USE_APONTAMENTO_HOOK` → Testar → Validar
+   - `USE_ALUNICA_MODALS_HOOK` → Testar → Validar
+
+3. **Se todos passarem:**
+   - Continuar para Fase 6 (Tabs completas)
+   - Remover código duplicado
+
+4. **Se algum falhar:**
+   - Desativar flag problemática
+   - Corrigir bug
+   - Re-testar
+   - Documentar problema e solução
+
+### ⏸️ PAUSA ESTRATÉGICA
+Não recomendamos continuar extraindo código até que a validação esteja completa.
 1. Commitar progresso atual
 2. Fazer merge na main (opcional)
 3. Documentar decisões técnicas
