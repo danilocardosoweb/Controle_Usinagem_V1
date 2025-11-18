@@ -1,5 +1,13 @@
 # Log de Alterações
 
+[18/11/2025 14:10] - [Refatoração Fase 3] - [Progresso: 45% concluído] - [Cascade]
+- Hook useApontamentoModal.js criado (410 linhas de lógica encapsulada)
+- Gerencia completamente o estado e funções do modal de apontamento
+- Integrado no ExpUsinagem.jsx com feature flag USE_APONTAMENTO_HOOK (desativada)
+- Build testado - compilação 100% funcional
+- Botão "Apontar" atualizado para usar hook quando flag ativada
+- 11 estados + 5 funções movidas para o hook
+
 [18/11/2025 13:50] - [Refatoração Fases 0-2] - [Progresso: 30% concluído] - [Cascade]
 - FASE 0: Branch refactor/exp-usinagem-safe criada + snapshot + estrutura de pastas
 - FASE 1: ApontamentoModal.jsx extraído (227 linhas) com feature flag USE_NEW_APONTAMENTO_MODAL
