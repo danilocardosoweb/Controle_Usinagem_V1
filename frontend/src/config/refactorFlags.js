@@ -18,6 +18,7 @@ export const REFACTOR = {
   USE_NEW_ALUNICA_TAB: false,
   
   // Hooks
+  USE_APONTAMENTO_HOOK: false,
   USE_NEW_ALUNICA_HOOK: false,
   USE_NEW_TECNO_HOOK: false,
   

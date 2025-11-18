@@ -19,6 +19,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { isAdmin as isAdminCheck } from '../utils/auth'
 import { REFACTOR } from '../config/refactorFlags'
 import ApontamentoModal from '../components/exp-usinagem/modals/ApontamentoModal'
+import useApontamentoModal from '../hooks/useApontamentoModal'
 import {
   TABS,
   TECNOPERFIL_STATUS,
@@ -376,6 +377,16 @@ const ExpUsinagem = () => {
     saveInventarioItem,
     cancelInventario
   } = useInventarios({ fluxoPedidos, pedidosTecnoPerfil, alunicaStages, user })
+
+  // Hook de apontamento (opcional via feature flag)
+  const apontamentoHook = REFACTOR.USE_APONTAMENTO_HOOK
+    ? useApontamentoModal({
+        user,
+        pedidosTecnoPerfil,
+        loadApontamentosFor,
+        loadFluxo
+      })
+    : null;
 
   useEffect(() => {
     if (activeTab === 'Estoque da Usinagem' && estoqueSubTab === 'inventarios') {
@@ -2053,9 +2064,13 @@ const ExpUsinagem = () => {
           <button
             type="button"
             onClick={() => {
-              setAlunicaApontPedido(pedidoCtx)
-              setAlunicaApontStage(stageKey)
-              setAlunicaApontOpen(true)
+              if (REFACTOR.USE_APONTAMENTO_HOOK && apontamentoHook) {
+                apontamentoHook.openModal(pedidoCtx.id, stageKey);
+              } else {
+                setAlunicaApontPedido(pedidoCtx)
+                setAlunicaApontStage(stageKey)
+                setAlunicaApontOpen(true)
+              }
             }}
             className={getButtonClasses('primary')}
             disabled={isLoading}
@@ -2907,24 +2922,24 @@ const ExpUsinagem = () => {
 
       {REFACTOR.USE_NEW_APONTAMENTO_MODAL ? (
         <ApontamentoModal
-          open={alunicaApontOpen}
-          pedido={alunicaApontPedido}
-          stage={alunicaApontStage}
-          qtdPc={alunicaApontQtdPc}
-          qtdPcInspecao={alunicaApontQtdPcInspecao}
-          obs={alunicaApontObs}
-          inicio={alunicaApontInicio}
-          fim={alunicaApontFim}
-          saving={alunicaApontSaving}
-          error={alunicaApontError}
+          open={REFACTOR.USE_APONTAMENTO_HOOK ? apontamentoHook?.open : alunicaApontOpen}
+          pedido={REFACTOR.USE_APONTAMENTO_HOOK ? apontamentoHook?.pedido : alunicaApontPedido}
+          stage={REFACTOR.USE_APONTAMENTO_HOOK ? apontamentoHook?.stage : alunicaApontStage}
+          qtdPc={REFACTOR.USE_APONTAMENTO_HOOK ? apontamentoHook?.qtdPc : alunicaApontQtdPc}
+          qtdPcInspecao={REFACTOR.USE_APONTAMENTO_HOOK ? apontamentoHook?.qtdPcInspecao : alunicaApontQtdPcInspecao}
+          obs={REFACTOR.USE_APONTAMENTO_HOOK ? apontamentoHook?.obs : alunicaApontObs}
+          inicio={REFACTOR.USE_APONTAMENTO_HOOK ? apontamentoHook?.inicio : alunicaApontInicio}
+          fim={REFACTOR.USE_APONTAMENTO_HOOK ? apontamentoHook?.fim : alunicaApontFim}
+          saving={REFACTOR.USE_APONTAMENTO_HOOK ? apontamentoHook?.saving : alunicaApontSaving}
+          error={REFACTOR.USE_APONTAMENTO_HOOK ? apontamentoHook?.error : alunicaApontError}
           fluxoPedidos={fluxoPedidos}
-          onClose={closeAlunicaApontamento}
-          onSave={handleSalvarAlunicaApont}
-          onQtdPcChange={setAlunicaApontQtdPc}
-          onQtdPcInspecaoChange={setAlunicaApontQtdPcInspecao}
-          onObsChange={setAlunicaApontObs}
-          onInicioChange={handleInicioChange}
-          onFimChange={handleFimChange}
+          onClose={REFACTOR.USE_APONTAMENTO_HOOK ? apontamentoHook?.closeModal : closeAlunicaApontamento}
+          onSave={REFACTOR.USE_APONTAMENTO_HOOK ? apontamentoHook?.saveApontamento : handleSalvarAlunicaApont}
+          onQtdPcChange={REFACTOR.USE_APONTAMENTO_HOOK ? apontamentoHook?.setQtdPc : setAlunicaApontQtdPc}
+          onQtdPcInspecaoChange={REFACTOR.USE_APONTAMENTO_HOOK ? apontamentoHook?.setQtdPcInspecao : setAlunicaApontQtdPcInspecao}
+          onObsChange={REFACTOR.USE_APONTAMENTO_HOOK ? apontamentoHook?.setObs : setAlunicaApontObs}
+          onInicioChange={REFACTOR.USE_APONTAMENTO_HOOK ? apontamentoHook?.handleInicioChange : handleInicioChange}
+          onFimChange={REFACTOR.USE_APONTAMENTO_HOOK ? apontamentoHook?.handleFimChange : handleFimChange}
         />
       ) : (
         alunicaApontOpen && (
