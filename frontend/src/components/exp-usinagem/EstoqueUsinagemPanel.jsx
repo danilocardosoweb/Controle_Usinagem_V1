@@ -253,7 +253,7 @@ const EstoqueUsinagemPanel = ({
                     type="button"
                     className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-red-300 text-red-600 hover:bg-red-50 disabled:opacity-50"
                     onClick={() => handleOpenBaixa(r)}
-                    disabled={r.saldoPc === 0 && r.saldoKg === 0}
+                    disabled={r.apontPc === 0 && r.apontKg === 0}
                     title="Dar baixa no estoque"
                     aria-label="Dar baixa no estoque"
                   >

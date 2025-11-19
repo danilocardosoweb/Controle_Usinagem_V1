@@ -1,8 +1,20 @@
 import { useState, useEffect, useMemo } from 'react'
 import { FaUpload, FaCalendarAlt, FaClock, FaChartLine, FaFilter } from 'react-icons/fa'
 import * as XLSX from 'xlsx'
+import { Line } from 'react-chartjs-2'
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Tooltip,
+  Legend
+} from 'chart.js'
 import supabaseService from '../../services/SupabaseService'
 import { formatDateBR, formatInteger, formatNumber, toIntegerRound, toDecimal } from '../../utils/expUsinagem'
+
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend)
 
 /**
  * Painel de Análise de Produtividade
@@ -77,7 +89,22 @@ const AnaliseProdutividadePanel = () => {
         apontamentosPorDia: [],
         apontamentosPorSemana: [],
         mediaHorasDia: 0,
-        mediaPecasDia: 0
+        mediaPecasDia: 0,
+        usinagem: {
+          totalPecas: 0,
+          totalHoras: 0,
+          pecasPorHora: 0
+        },
+        inspecao: {
+          totalPecas: 0,
+          totalHoras: 0,
+          pecasPorHora: 0
+        },
+        embalagem: {
+          totalPecas: 0,
+          totalHoras: 0,
+          pecasPorHora: 0
+        }
       }
     }
 
@@ -86,21 +113,48 @@ const AnaliseProdutividadePanel = () => {
     const porDia = {}
     const porSemana = {}
 
+    let totalPecasUsinagem = 0
+    let totalMinUsinagem = 0
+    let totalPecasInspecao = 0
+    let totalMinInspecao = 0
+    let totalPecasEmbalagem = 0
+    let totalMinEmbalagem = 0
+
     apontamentosFiltrados.forEach(a => {
       const qtd = toIntegerRound(a.quantidade) || 0
       totalPecas += qtd
 
-      // Calcular tempo trabalhado
+      // Calcular tempo trabalhado por apontamento
+      let diffMin = 0
       if (a.inicio && a.fim) {
         try {
           const inicio = new Date(a.inicio)
           const fim = new Date(a.fim)
           const diffMs = fim - inicio
-          const diffMin = Math.max(0, diffMs / (1000 * 60))
+          diffMin = Math.max(0, diffMs / (1000 * 60))
           totalMinutos += diffMin
         } catch (e) {
           console.warn('Erro ao calcular tempo:', e)
         }
+      }
+
+      // Segmentos principais: Usinagem geral (sem EXP), Inspeção e Embalagem (Alúnica)
+      const isUsinagemGeral = !a.exp_fluxo_id && !a.exp_unidade && !a.exp_stage
+      if (isUsinagemGeral) {
+        totalPecasUsinagem += qtd
+        totalMinUsinagem += diffMin
+      }
+
+      const isInspecaoAlunica = a.exp_unidade === 'alunica' && a.exp_stage === 'para-inspecao'
+      if (isInspecaoAlunica) {
+        totalPecasInspecao += qtd
+        totalMinInspecao += diffMin
+      }
+
+      const isEmbalagemAlunica = a.exp_unidade === 'alunica' && a.exp_stage === 'para-embarque'
+      if (isEmbalagemAlunica) {
+        totalPecasEmbalagem += qtd
+        totalMinEmbalagem += diffMin
       }
 
       // Agrupar por dia
@@ -119,18 +173,7 @@ const AnaliseProdutividadePanel = () => {
         
         porDia[diaKey].pecas += qtd
         porDia[diaKey].apontamentos += 1
-        
-        if (a.inicio && a.fim) {
-          try {
-            const inicio = new Date(a.inicio)
-            const fim = new Date(a.fim)
-            const diffMs = fim - inicio
-            const diffMin = Math.max(0, diffMs / (1000 * 60))
-            porDia[diaKey].minutos += diffMin
-          } catch (e) {
-            // ignorar
-          }
-        }
+        porDia[diaKey].minutos += diffMin
 
         // Agrupar por semana (ISO week)
         const semana = getISOWeek(data)
@@ -148,18 +191,7 @@ const AnaliseProdutividadePanel = () => {
         
         porSemana[semanaKey].pecas += qtd
         porSemana[semanaKey].apontamentos += 1
-        
-        if (a.inicio && a.fim) {
-          try {
-            const inicio = new Date(a.inicio)
-            const fim = new Date(a.fim)
-            const diffMs = fim - inicio
-            const diffMin = Math.max(0, diffMs / (1000 * 60))
-            porSemana[semanaKey].minutos += diffMin
-          } catch (e) {
-            // ignorar
-          }
-        }
+        porSemana[semanaKey].minutos += diffMin
       }
     })
 
@@ -188,6 +220,29 @@ const AnaliseProdutividadePanel = () => {
     const mediaHorasDia = diasComDados > 0 ? totalHoras / diasComDados : 0
     const mediaPecasDia = diasComDados > 0 ? totalPecas / diasComDados : 0
 
+    // Métricas segmentadas
+    const usinagemHoras = totalMinUsinagem / 60
+    const inspecaoHoras = totalMinInspecao / 60
+    const embalagemHoras = totalMinEmbalagem / 60
+
+    const usinagem = {
+      totalPecas: totalPecasUsinagem,
+      totalHoras: usinagemHoras,
+      pecasPorHora: usinagemHoras > 0 ? totalPecasUsinagem / usinagemHoras : 0
+    }
+
+    const inspecao = {
+      totalPecas: totalPecasInspecao,
+      totalHoras: inspecaoHoras,
+      pecasPorHora: inspecaoHoras > 0 ? totalPecasInspecao / inspecaoHoras : 0
+    }
+
+    const embalagem = {
+      totalPecas: totalPecasEmbalagem,
+      totalHoras: embalagemHoras,
+      pecasPorHora: embalagemHoras > 0 ? totalPecasEmbalagem / embalagemHoras : 0
+    }
+
     return {
       totalPecas,
       totalHoras,
@@ -195,18 +250,75 @@ const AnaliseProdutividadePanel = () => {
       apontamentosPorDia,
       apontamentosPorSemana,
       mediaHorasDia,
-      mediaPecasDia
+      mediaPecasDia,
+      usinagem,
+      inspecao,
+      embalagem
     }
   }, [apontamentosFiltrados])
 
   // Função para calcular semana ISO
-  const getISOWeek = (date) => {
+  function getISOWeek (date) {
     const d = new Date(date)
     d.setHours(0, 0, 0, 0)
     d.setDate(d.getDate() + 4 - (d.getDay() || 7))
     const yearStart = new Date(d.getFullYear(), 0, 1)
     const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7)
     return weekNo
+  }
+
+  const chartDataProdDia = useMemo(() => {
+    if (!metricas.apontamentosPorDia.length) {
+      return { labels: [], datasets: [] }
+    }
+
+    const ordered = [...metricas.apontamentosPorDia].slice().reverse()
+
+    return {
+      labels: ordered.map((d) => formatDateBR(d.data)),
+      datasets: [
+        {
+          label: 'Peças/Hora',
+          data: ordered.map((d) => d.pecasPorHora || 0),
+          borderColor: 'rgb(37,99,235)',
+          backgroundColor: 'rgba(37,99,235,0.15)',
+          tension: 0.3,
+          fill: true,
+          pointRadius: 3
+        }
+      ]
+    }
+  }, [metricas.apontamentosPorDia])
+
+  const chartOptionsProdDia = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => {
+            const value = ctx.parsed.y || 0
+            try {
+              return `${new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)} peças/h`
+            } catch {
+              return `${value} peças/h`
+            }
+          }
+        }
+      }
+    },
+    scales: {
+      x: {
+        ticks: {
+          autoSkip: true,
+          maxTicksLimit: 10
+        }
+      },
+      y: {
+        beginAtZero: true
+      }
+    }
   }
 
   // Exportar relatório
@@ -230,7 +342,18 @@ const AnaliseProdutividadePanel = () => {
         ['Peças por Hora (Média)', formatNumber(metricas.pecasPorHora)],
         ['Média de Horas por Dia', formatNumber(metricas.mediaHorasDia)],
         ['Média de Peças por Dia', formatNumber(metricas.mediaPecasDia)],
-        ['Total de Apontamentos', apontamentosFiltrados.length]
+        ['Total de Apontamentos', apontamentosFiltrados.length],
+        [''],
+        ['MÉTRICAS POR ETAPA'],
+        ['Usinagem (Geral) - Peças', formatInteger(metricas.usinagem.totalPecas)],
+        ['Usinagem (Geral) - Horas', formatNumber(metricas.usinagem.totalHoras)],
+        ['Usinagem (Geral) - Peças/Hora', formatNumber(metricas.usinagem.pecasPorHora)],
+        ['Inspeção (Alúnica) - Peças', formatInteger(metricas.inspecao.totalPecas)],
+        ['Inspeção (Alúnica) - Horas', formatNumber(metricas.inspecao.totalHoras)],
+        ['Inspeção (Alúnica) - Peças/Hora', formatNumber(metricas.inspecao.pecasPorHora)],
+        ['Embalagem (Alúnica) - Peças', formatInteger(metricas.embalagem.totalPecas)],
+        ['Embalagem (Alúnica) - Horas', formatNumber(metricas.embalagem.totalHoras)],
+        ['Embalagem (Alúnica) - Peças/Hora', formatNumber(metricas.embalagem.pecasPorHora)]
       ]
       const wsResumo = XLSX.utils.aoa_to_sheet(resumo)
       XLSX.utils.book_append_sheet(wb, wsResumo, 'Resumo')
@@ -267,7 +390,32 @@ const AnaliseProdutividadePanel = () => {
       const wsPorSemana = XLSX.utils.aoa_to_sheet(porSemana)
       XLSX.utils.book_append_sheet(wb, wsPorSemana, 'Por Semana')
 
-      // Aba 4: Apontamentos Detalhados
+      // Aba 4: Produtividade por Etapa
+      const porEtapa = [
+        ['Etapa', 'Peças', 'Horas', 'Peças/Hora']
+      ]
+      porEtapa.push([
+        'Usinagem (Geral)',
+        metricas.usinagem.totalPecas,
+        formatNumber(metricas.usinagem.totalHoras),
+        formatNumber(metricas.usinagem.pecasPorHora)
+      ])
+      porEtapa.push([
+        'Inspeção (Alúnica)',
+        metricas.inspecao.totalPecas,
+        formatNumber(metricas.inspecao.totalHoras),
+        formatNumber(metricas.inspecao.pecasPorHora)
+      ])
+      porEtapa.push([
+        'Embalagem (Alúnica)',
+        metricas.embalagem.totalPecas,
+        formatNumber(metricas.embalagem.totalHoras),
+        formatNumber(metricas.embalagem.pecasPorHora)
+      ])
+      const wsPorEtapa = XLSX.utils.aoa_to_sheet(porEtapa)
+      XLSX.utils.book_append_sheet(wb, wsPorEtapa, 'Por Etapa')
+
+      // Aba 5: Apontamentos Detalhados
       const detalhes = [
         ['ID', 'Data', 'Pedido', 'Unidade', 'Estágio', 'Lote', 'Quantidade', 'Início', 'Fim', 'Tempo (min)', 'Observações']
       ]
@@ -418,6 +566,60 @@ const AnaliseProdutividadePanel = () => {
               <FaCalendarAlt className="h-6 w-6 text-orange-600" />
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Produtividade por Etapa (Usinagem, Inspeção, Embalagem) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="rounded-xl bg-gradient-to-r from-sky-500 to-indigo-600 text-white shadow p-4">
+          <p className="text-xs font-semibold uppercase opacity-80">Usinagem (Geral)</p>
+          <p className="mt-2 text-2xl font-bold">{formatNumber(metricas.usinagem.pecasPorHora)}</p>
+          <p className="mt-1 text-xs opacity-80">
+            {formatInteger(metricas.usinagem.totalPecas)} peças 
+            {' · '}
+            {formatNumber(metricas.usinagem.totalHoras)} h
+          </p>
+        </div>
+
+        <div className="rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow p-4">
+          <p className="text-xs font-semibold uppercase opacity-80">Inspeção (Alúnica)</p>
+          <p className="mt-2 text-2xl font-bold">{formatNumber(metricas.inspecao.pecasPorHora)}</p>
+          <p className="mt-1 text-xs opacity-80">
+            {formatInteger(metricas.inspecao.totalPecas)} peças 
+            {' · '}
+            {formatNumber(metricas.inspecao.totalHoras)} h
+          </p>
+        </div>
+
+        <div className="rounded-xl bg-gradient-to-r from-amber-500 to-rose-600 text-white shadow p-4">
+          <p className="text-xs font-semibold uppercase opacity-80">Embalagem (Alúnica)</p>
+          <p className="mt-2 text-2xl font-bold">{formatNumber(metricas.embalagem.pecasPorHora)}</p>
+          <p className="mt-1 text-xs opacity-80">
+            {formatInteger(metricas.embalagem.totalPecas)} peças 
+            {' · '}
+            {formatNumber(metricas.embalagem.totalHoras)} h
+          </p>
+        </div>
+      </div>
+
+      {/* Gráfico de tendência de produtividade */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold text-gray-800">Tendência de Produtividade (Peças/Hora)</h3>
+          <span className="text-xs text-gray-500">
+            {metricas.apontamentosPorDia.length > 0
+              ? `${metricas.apontamentosPorDia.length} dia(s) com dados`
+              : 'Sem dados para o período selecionado'}
+          </span>
+        </div>
+        <div className="h-64">
+          {chartDataProdDia.labels.length ? (
+            <Line data={chartDataProdDia} options={chartOptionsProdDia} />
+          ) : (
+            <div className="flex h-full items-center justify-center text-sm text-gray-500">
+              Nenhum dado suficiente para montar o gráfico.
+            </div>
+          )}
         </div>
       </div>
 

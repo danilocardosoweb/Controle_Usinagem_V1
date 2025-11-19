@@ -2865,7 +2865,7 @@ const ExpUsinagem = () => {
 
     const statuses = STATUS_TABS[activeTab] || []
 
-    if (statuses.length === 0 && activeTab !== 'Estoque da Usinagem') {
+    if (statuses.length === 0 && activeTab !== 'Estoque da Usinagem' && activeTab !== 'Análise da Produtividade') {
       return (
         <p className="text-gray-500">
           Em breve adicionaremos indicadores específicos para esta área.

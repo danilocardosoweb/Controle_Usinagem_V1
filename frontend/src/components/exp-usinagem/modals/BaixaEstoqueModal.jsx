@@ -43,8 +43,8 @@ const BaixaEstoqueModal = ({
 
   if (!open || !item) return null;
 
-  const saldoPc = toIntegerRound(item.saldoPc) || 0;
-  const saldoKg = toDecimal(item.saldoKg) || 0;
+  const saldoPc = toIntegerRound(item.apontPc ?? item.saldoPc) || 0;
+  const saldoKg = toDecimal(item.apontKg ?? item.saldoKg) || 0;
 
   const handleConfirm = () => {
     setValidationError('');
