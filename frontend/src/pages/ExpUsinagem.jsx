@@ -3033,6 +3033,7 @@ const ExpUsinagem = () => {
           onObsChange={REFACTOR.USE_APONTAMENTO_HOOK ? apontamentoHook?.setObs : setAlunicaApontObs}
           onInicioChange={REFACTOR.USE_APONTAMENTO_HOOK ? apontamentoHook?.handleInicioChange : handleInicioChange}
           onFimChange={REFACTOR.USE_APONTAMENTO_HOOK ? apontamentoHook?.handleFimChange : handleFimChange}
+          onSugerirDistribuicao={REFACTOR.USE_APONTAMENTO_HOOK ? apontamentoHook?.handleSugerirDistribuicao : undefined}
         />
       ) : (
         alunicaApontOpen && (

@@ -153,6 +153,29 @@ export const useApontamentoModal = ({
   }, []);
 
   /**
+   * Sugere distribuição automática baseada em boas práticas
+   * - Se quantidade >= 100: 30% para inspeção (min 20, max 50)
+   * - Se quantidade < 100: tudo para inspeção
+   */
+  const handleSugerirDistribuicao = useCallback(() => {
+    const total = toIntegerRound(qtdPc) || 0;
+    if (total === 0) {
+      setError('Informe a quantidade produzida primeiro.');
+      return;
+    }
+
+    if (total < 100) {
+      // Para lotes pequenos, tudo vai para inspeção
+      setQtdPcInspecao(String(total));
+    } else {
+      // Para lotes grandes, 30% para inspeção (entre 20 e 50 peças)
+      const sugestao = Math.max(20, Math.min(50, Math.round(total * 0.3)));
+      setQtdPcInspecao(String(sugestao));
+    }
+    setError(null);
+  }, [qtdPc]);
+
+  /**
    * Salva o apontamento
    */
   const saveApontamento = useCallback(async () => {
@@ -339,14 +362,20 @@ export const useApontamentoModal = ({
         saldo_atualizado_em: agora
       });
 
-      // Registra movimentação
+      // Registra movimentação de quantidade
       try {
         await supabaseService.add('exp_pedidos_movimentacoes', {
           fluxo_id: pedido.id,
           status_anterior: fluxoAtual?.status_atual || 'pedido',
           status_novo: fluxoAtual?.status_atual || 'pedido',
-          motivo: null,
-          tipo_movimentacao: 'apontamento',
+          motivo: 'apontamento_producao',
+          tipo_movimentacao: 'quantidade',
+          kg_movimentado: kg || 0,
+          pc_movimentado: pcs || 0,
+          kg_disponivel_anterior: prevKgDisp,
+          kg_disponivel_atual: novoKgDisp,
+          pc_disponivel_anterior: prevPcDisp,
+          pc_disponivel_atual: novoPcDisp,
           movimentado_por: user?.nome || user?.email || 'Operador',
           movimentado_em: agora
         });
@@ -403,6 +432,7 @@ export const useApontamentoModal = ({
     closeModal,
     handleInicioChange,
     handleFimChange,
+    handleSugerirDistribuicao,
     saveApontamento
   };
 };

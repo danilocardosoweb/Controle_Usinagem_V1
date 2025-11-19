@@ -71,6 +71,10 @@ const EstoqueUsinagemPanel = ({
   const filtered = rowsBase.filter((r) => {
     if (estoqueUnidade === 'tecno' && r.unidade !== 'TecnoPerfil') return false
     if (estoqueUnidade === 'alunica' && r.unidade !== 'Alúnica') return false
+
+    // Esconder itens sem saldo por padrão (todas/com), mantendo-os visíveis apenas quando filtro for 'sem'
+    if (estoqueSituacao !== 'sem' && r.saldoKg === 0 && r.saldoPc === 0) return false
+
     if (estoqueSituacao === 'com') {
       if (!((r.saldoKg > 0) || (r.saldoPc > 0))) return false
     }
@@ -112,30 +116,45 @@ const EstoqueUsinagemPanel = ({
     try {
       const { item, tipoBaixa, quantidadePc, quantidadeKg, observacao } = dados
 
-      // Criar registro de movimentação de estoque
+      const agora = new Date().toISOString()
+
+      // Criar registro de movimentação de estoque compatível com o schema exp_pedidos_movimentacoes
       const movimentacao = {
         fluxo_id: item.id,
-        tipo_movimentacao: 'baixa_estoque',
-        tipo_baixa: tipoBaixa, // 'consumo' ou 'venda'
-        quantidade_pc: quantidadePc,
-        quantidade_kg: quantidadeKg,
-        observacoes: observacao || null,
-        movimentado_em: new Date().toISOString(),
-        movimentado_por: 'Sistema' // Pode ser substituído por user atual
+        status_anterior: item.estagio || null,
+        status_novo: item.estagio || null,
+        motivo: observacao || (tipoBaixa === 'venda' ? 'baixa_venda' : 'baixa_consumo'),
+        movimentado_por: 'Sistema', // Pode ser substituído por user atual
+        movimentado_em: agora,
+        tipo_movimentacao: 'quantidade',
+        pc_movimentado: quantidadePc,
+        kg_movimentado: quantidadeKg
       }
 
       // Salvar movimentação
       await supabaseService.add('exp_pedidos_movimentacoes', movimentacao)
 
-      // Atualizar saldos no fluxo (se necessário)
-      // Nota: O saldo já é calculado dinamicamente, então não precisa atualizar
-      // Mas podemos adicionar um campo de controle se necessário
+      // Buscar registro atual do fluxo
+      const fluxoAtual = byIdRaw[String(item.id)] || {}
+      const saldoPcAtual = toIntegerRound(fluxoAtual.saldo_pc_total) || 0
+      const saldoKgAtual = toDecimal(fluxoAtual.saldo_kg_total) || 0
 
-      // Fechar modal e atualizar
-      handleCloseBaixa()
-      
-      // Recarregar dados se necessário
-      // window.location.reload() // ou chamar função de reload passada por props
+      // Atualizar saldos no fluxo - SOMAR a quantidade baixada ao saldo_pc_total/kg_total
+      // (isso faz o saldo disponível diminuir, pois saldo = pedido - apontado)
+      const novoSaldoPc = saldoPcAtual + (toIntegerRound(quantidadePc) || 0)
+      const novoSaldoKg = saldoKgAtual + (toDecimal(quantidadeKg) || 0)
+
+      await supabaseService.update('exp_pedidos_fluxo', {
+        id: item.id,
+        saldo_pc_total: novoSaldoPc,
+        saldo_kg_total: novoSaldoKg,
+        saldo_atualizado_em: agora
+      })
+
+      // Recarregar dados para atualizar UI
+      if (typeof window !== 'undefined') {
+        window.location.reload()
+      }
       
       alert(`Baixa de estoque registrada com sucesso!\nTipo: ${tipoBaixa}\nPc: ${quantidadePc} | Kg: ${quantidadeKg}`)
     } catch (error) {

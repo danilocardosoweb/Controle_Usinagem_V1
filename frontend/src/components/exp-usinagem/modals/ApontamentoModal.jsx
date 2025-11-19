@@ -1,5 +1,5 @@
 import React from 'react';
-import { FaTimes } from 'react-icons/fa';
+import { FaTimes, FaMagic } from 'react-icons/fa';
 import { 
   formatInteger, 
   formatNumber, 
@@ -31,6 +31,7 @@ import {
  * @param {Function} props.onObsChange - Handler de mudança de observações
  * @param {Function} props.onInicioChange - Handler de mudança de início
  * @param {Function} props.onFimChange - Handler de mudança de fim
+ * @param {Function} props.onSugerirDistribuicao - Handler para sugerir distribuição automática
  */
 const ApontamentoModal = ({
   open,
@@ -50,7 +51,8 @@ const ApontamentoModal = ({
   onQtdPcInspecaoChange,
   onObsChange,
   onInicioChange,
-  onFimChange
+  onFimChange,
+  onSugerirDistribuicao
 }) => {
   if (!open) return null;
 
@@ -178,6 +180,25 @@ const ApontamentoModal = ({
                 </div>
               </>
             )}
+          </div>
+
+          {/* Botão de sugestão de distribuição */}
+          {!isStageEmbalagem && onSugerirDistribuicao && (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={onSugerirDistribuicao}
+                disabled={saving || !qtdPc || toIntegerRound(qtdPc) === 0}
+                className="inline-flex items-center gap-2 rounded-md border border-purple-300 bg-purple-50 px-3 py-1.5 text-xs font-semibold text-purple-700 transition hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-60"
+                title="Preencher automaticamente baseado em boas práticas"
+              >
+                <FaMagic className="h-3 w-3" />
+                Sugerir Distribuição
+              </button>
+            </div>
+          )}
+
+          <div className="grid gap-3 sm:grid-cols-2">
             <div className="sm:col-span-1">
               <label className="mb-1 block text-xs font-semibold uppercase text-gray-500">
                 Início
