@@ -46,6 +46,7 @@ O Sistema de Controle e Apontamentos da Usinagem é uma aplicação web desenvol
 - Produção por período (turno, dia, mês)
 - Relatório de paradas de máquina com classificação
 - Desempenho por operador/máquina
+- **Relatórios por área (Usinagem x Embalagem):** versões específicas dos relatórios de Produção/Desempenho/Produtividade filtrando os apontamentos pela unidade (`apontamentos.exp_unidade`).
 - Exportação em Excel e PDF
 
 ### 5. Previsão de Trabalho
@@ -109,6 +110,31 @@ O Sistema de Controle e Apontamentos da Usinagem é uma aplicação web desenvol
   - `para-usinar`: saldo a produzir (pedidoPcTotal − pcs já apontados em Inspeção + Embalagem).
   - `para-inspecao`: soma dos apontamentos `exp_unidade='alunica' AND exp_stage='para-inspecao'` dos pedidos naquele estágio.
   - `para-embarque`: soma dos apontamentos `exp_unidade='alunica' AND exp_stage='para-embarque'` dos pedidos naquele estágio.
+
+##### 6.1.2 Sistema de Rastreabilidade de Lotes (Nov/2025)
+
+- **Lotes Derivados com Rastreabilidade Completa:**
+  - **Lote Base (Usinagem):** Gerado automaticamente no formato `DDMMAAAA-HHMM-PEDIDO` (ex: `20112025-1430-78914/10`)
+  - **Lotes Derivados:** Sufixos sequenciais `-INS-01`, `-INS-02` (inspeção) e `-EMB-01`, `-EMB-02` (embalagem)
+  - Campo `apontamentos.lote_externo` armazena o lote base para rastreabilidade origem
+  - Campo `apontamentos.lote` armazena o lote derivado com sufixo
+  - Sequência automática garante códigos únicos mesmo com múltiplos apontamentos
+- **Modal "Apontar Embalagem – Alúnica":**
+  - Título muda automaticamente quando estágio é `para-embarque`
+  - Exibe bloco "Disponível para Embalar" com:
+    - Total disponível calculado em tempo real dos apontamentos `para-embarque`
+    - Tabela com "Lote de Usinagem" (origem) e "Lote de Embalagem" (derivado)
+    - **Saldo projetado após o apontamento atual** (verde se OK, vermelho se exceder)
+    - **Alerta visual** quando quantidade informada excede o disponível
+  - Validação em tempo real previne erros antes do salvamento
+- **Interface de Cards Aprimorada:**
+  - Cards de Inspeção/Embalagem exibem colunas separadas: "Lote Usinagem" e "Lote Inspeção/Embalagem"
+  - Rastreabilidade completa visível em toda a interface
+  - Operador consegue rastrear qualquer lote da origem até a embalagem final
+- **Validação de Finalização:**
+  - Modal de bloqueio impede finalização quando há pendências de inspeção/embalagem
+  - Verifica produção completa antes de permitir finalização do pedido
+  - Mensagens descritivas indicam o motivo do bloqueio
 
 ### 6. Integração da Carteira de Encomendas
 

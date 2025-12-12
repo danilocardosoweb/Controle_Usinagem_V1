@@ -1,4 +1,134 @@
 # Log de Alterações
+[12/12/2025 09:24] - [Frontend] - [Estoque: Status de Ferramentas editável (vida útil, última troca, responsável) via modal] - [Cascade]
+[12/12/2025 09:09] - [Frontend] - [Estoque: edição de estoque mínimo (Itens Acabados via configuracoes e Insumos via qtd_minima)] - [Cascade]
+[12/12/2025 09:07] - [Frontend] - [Estoque: campo Máquina/Setor e Máquina agora usam lista de máquinas cadastradas (tabela maquinas)] - [Cascade]
+[12/12/2025 08:43] - [Frontend] - [Estoque: filtros operacionais (buscar/somente com saldo/somente abaixo do mínimo) e seções secundárias recolhidas por padrão] - [Cascade]
+[12/12/2025 08:37] - [Frontend] - [Relatórios: novos tipos específicos para Apontamentos de Usinagem e Apontamentos de Embalagem (produção/desempenho/produtividade) filtrando por exp_unidade] - [Cascade]
+[12/12/2025 08:25] - [Estoque] - [Insumos: upload de foto no Supabase Storage (bucket estoque-itens) e vínculo da foto ao item (foto_url) + preview na UI] - [Cascade]
+[11/12/2025 22:12] - [Frontend] - [Nova rota/aba "Apontamentos de Embalagem"] - [Cascade]
+- Adicionada rota `/apontamentos-embalagem` em `App.jsx`.
+- Adicionado item no menu lateral em `Sidebar.jsx` logo abaixo de "Apontamentos de Usinagem".
+- Página `ApontamentosEmbalagem.jsx` criada reutilizando o mesmo formulário e funcionalidades de `ApontamentosUsinagem`.
+
+
+[11/12/2025 22:05] - [Frontend] - [Remoção da aba "EXP - Usinagem" (rota e menu desativados)] - [Cascade]
+- Rota removida de `App.jsx` e item de menu ocultado no `Sidebar.jsx`.
+- Nenhuma referência ativa restante para a página `ExpUsinagem`.
+- Próximo passo aprovado: exclusão física dos arquivos relacionados (página, componentes, hooks e utils específicos) para reduzir o bundle.
+
+[20/11/2025 09:45] - [Frontend] - [EXP - Usinagem: Fase 1 concluída (hooks + validação completa)] - [Cascade]
+- **Hooks refatorados ativados:**
+  - `useTecnoPerfilState` centraliza `orderStages`, deleções e movimentações (ExpUsinagem.jsx agora consome apenas `moveOrderToStage`, `deleteFromFlow`, `isDeleting`, `tecnoPerfilBuckets`).
+  - `useAlunicaState` concentra `alunicaStages`, `finalizados`, buckets/totais e `handleAlunicaAction`, removendo ~300 linhas do componente principal.
+  - `useApontamentoModal` totalmente integrado, eliminando estados duplicados e modais antigos.
+- **Correções estruturais:**
+  - Reordenado os hooks para evitar o erro "can't access lexical declaration 'alunicaStages' before initialization".
+  - Botão de exclusão na Alúnica passa a usar `isDeleting(orderId)` para respeitar o estado global de deleção.
+- **Validação Funcional (Fase 1.4):**
+  - Testes manuais cobrindo TecnoPerfil, Alúnica, Estoque, Inventários e Exportações.
+  - Sem erros de runtime após ajustes; apenas warnings conhecidos do React Router.
+  - Registro completo em `docs/VALIDACAO_FASE1_EXP_USINAGEM.md` com metodologia, cenários e resultados.
+- **Impacto:** ExpUsinagem.jsx reduzido em ~730 linhas (-22%), estados locais caíram de >50 para ~25, preparando terreno para Fase 2 (toasts/UX).
+
+[20/11/2025 08:00] - [Full Stack] - [EXP - Estoque: Sistema de baixas com rastreabilidade por lote] - [Cascade]
+- **Nova Tabela no Banco de Dados:**
+  - Criada tabela `exp_estoque_baixas` via MCP para rastreabilidade completa
+  - Campos: `fluxo_id`, `lote_codigo`, `tipo_baixa`, `quantidade_pc/kg`, `baixado_por`, `estornado`
+  - 5 índices para performance: fluxo, lote, tipo, data, estornado
+  - Suporta estorno de baixas com justificativa
+- **Modal de Baixa Refatorado:**
+  - Agora exibe lotes disponíveis em tabela interativa
+  - Seleção múltipla de lotes com checkbox
+  - Quantidade individual por lote (Pc e Kg)
+  - Validação por lote: não permite exceder disponível
+  - Exibe "Lote Usinagem" e "Lote Embalagem" para rastreabilidade
+  - Arquivo: `BaixaEstoqueModal.jsx` (linhas 1-313)
+- **Painel de Estoque Atualizado:**
+  - Carrega lotes de embalagem (`exp_stage='para-embarque'`) ao abrir modal
+  - Calcula disponível por lote: `quantidade_apontada - baixas_anteriores`
+  - Busca baixas da nova tabela `exp_estoque_baixas` (ignora estornadas)
+  - Salva baixas com rastreabilidade: `lote_codigo`, `tipo_baixa`, quantidades
+  - Arquivo: `EstoqueUsinagemPanel.jsx` (linhas 38-246)
+- **Validações Implementadas:**
+  - Pelo menos um lote deve ser selecionado
+  - Quantidade (Pc ou Kg) obrigatória para cada lote
+  - Quantidade não pode exceder disponível do lote
+  - Mensagens descritivas indicam lote específico com problema
+- **Rastreabilidade Completa:**
+  - Usinagem → Inspeção → Embalagem → Baixa (consumo/venda)
+  - Cada baixa registra `lote_codigo` específico
+  - Possível rastrear origem de cada peça consumida/vendida
+  - Auditoria completa: quem, quando, quanto, qual lote
+- **Documentação Atualizada:**
+  - `database_schema.md`: Nova tabela `exp_estoque_baixas` documentada
+  - `docs/ANALISE_ESTOQUE_USINAGEM.md`: Análise completa do fluxo
+- **Próximas Melhorias Identificadas:**
+  - Substituir `alert()` por toast/notificação moderna
+  - Implementar estorno de baixas via interface
+  - Registrar usuário autenticado (atualmente "Sistema")
+  - Adicionar histórico de baixas no modal
+
+[20/11/2025 07:50] - [Frontend] - [EXP - Alúnica: Validações robustas de concorrência e finalização] - [Cascade]
+- **Validacão de Concorrência Implementada:**
+  - Validação em tempo real contra `exp_pedidos_fluxo.pc_disponivel` antes de salvar apontamento
+  - Previne que múltiplos operadores apontem mais do que o disponível simultaneamente
+  - Mensagem clara indicando conflito de concorrência: "Outro operador pode ter apontado simultaneamente"
+  - Validação específica para embalagem: verifica se há peças disponíveis antes de permitir apontamento
+  - Implementado em `useApontamentoModal.js` (linhas 257-292)
+- **Validacão de Finalização Reforcçada:**
+  - Nova função `validarFinalizacaoPorLote` verifica lote por lote antes de permitir finalização
+  - Validações implementadas:
+    1. Produção completa (apontadoTotal >= pedidoTotalPc)
+    2. Nenhum lote de inspeção pendente (exp_stage='para-inspecao')
+    3. Todos os lotes movidos para embalagem (totalPcsEmbalagem >= apontadoTotal)
+  - Mensagens descritivas indicam exatamente qual o problema:
+    - Lista lotes específicos aguardando aprovação
+    - Informa quantas peças faltam para embalar
+    - Mostra progresso (ex: "50/100 peças")
+  - Implementado em `ExpUsinagem.jsx` (linhas 2061-2131)
+- **Melhoria na Segurança dos Dados:**
+  - Elimina risco de finalização prematura com lotes pendentes
+  - Previne inconsistências por operações concorrentes
+  - Garante rastreabilidade completa até a finalização
+- **Arquivos modificados:**
+  - `frontend/src/hooks/useApontamentoModal.js`: Validação de concorrência (linhas 250-292)
+  - `frontend/src/pages/ExpUsinagem.jsx`: Validação de finalização por lote (linhas 2061-2131)
+
+[20/11/2025 07:40] - [Frontend] - [EXP - Alúnica: Sistema completo de rastreabilidade de lotes] - [Cascade]
+- **Implementado sistema de lotes derivados com rastreabilidade completa:**
+  - **Lote Base (Usinagem):** Formato `DDMMAAAA-HHMM-PEDIDO` (ex: `20112025-1430-78914/10`)
+  - **Lotes Derivados:** Sufixos `-INS-XX` (inspeção) e `-EMB-XX` (embalagem)
+  - Campo `lote_externo` armazena lote base para rastreabilidade
+  - Campo `lote` armazena lote derivado com sufixo sequencial
+- **Modal "Apontar Embalagem – Alúnica" completamente refatorado:**
+  - Título muda automaticamente para "Apontar Embalagem – Alúnica" quando estágio é `para-embarque`
+  - Bloco "Disponível para Embalar" exibe:
+    - Total disponível calculado de apontamentos `para-embarque`
+    - Tabela com "Lote de Usinagem" (origem) e "Lote de Embalagem" (derivado)
+    - **Saldo projetado após apontamento atual** (verde/vermelho)
+    - **Alerta visual** quando quantidade excede disponível
+  - Recebe `apontamentosPorFluxo` para cálculos em tempo real
+- **Cards de Inspeção/Embalagem atualizados:**
+  - Colunas separadas: "Lote Usinagem" e "Lote Inspeção/Embalagem"
+  - Rastreabilidade completa visível na interface
+- **Geração automática de lotes:**
+  - `useApontamentoModal.js`: Gera loteBase e lotes derivados automaticamente
+  - `useAlunicaModals.js`: Helpers para normalizar e gerar códigos únicos
+  - Sequência incremental garante códigos únicos (`-INS-01`, `-INS-02`, etc.)
+- **Validação de finalização aprimorada:**
+  - Modal de bloqueio quando há pendências de inspeção/embalagem
+  - Verifica produção completa antes de permitir finalização
+- **Arquivos modificados:**
+  - `frontend/src/utils/apontamentosLogic.js`: Função `summarizeApontamentos` expõe `loteExterno`
+  - `frontend/src/hooks/useApontamentoModal.js`: Geração de lotes derivados (linhas 254-322)
+  - `frontend/src/hooks/useAlunicaModals.js`: Helpers de lotes (linhas 1-45)
+  - `frontend/src/components/exp-usinagem/modals/ApontamentoModal.jsx`: UI completa (linhas 85-126)
+  - `frontend/src/components/exp-usinagem/AlunicaStageCard.jsx`: Colunas de rastreabilidade (linhas 120-133)
+  - `frontend/src/pages/ExpUsinagem.jsx`: Integração e modal de bloqueio
+- **Pendências identificadas para próxima iteração:**
+  - ⚠️ Validar apontamento contra saldo real em `exp_pedidos_fluxo.pc_disponivel`
+  - ⚠️ Reforçar validação de finalização usando lotes derivados individuais
+  - ⚠️ Adicionar testes de concorrência (múltiplos operadores)
 
 [18/11/2025 14:50] - [Refatoração/Pausa Estratégica] - [Validação necessária] - [Cascade]
 - **Arquivo criado:** `docs/GUIA_VALIDACAO_REFATORACAO.md` (documento completo de validação)

@@ -150,6 +150,17 @@ CREATE TABLE IF NOT EXISTS public.ferramentas_cfg (
   created_at TIMESTAMPTZ DEFAULT timezone('utc', now())
 );
 
+ALTER TABLE public.ferramentas_cfg
+  ADD COLUMN IF NOT EXISTS ferramenta text,
+  ADD COLUMN IF NOT EXISTS responsavel text,
+  ADD COLUMN IF NOT EXISTS vida_util_dias int,
+  ADD COLUMN IF NOT EXISTS ultima_troca timestamptz,
+  ADD COLUMN IF NOT EXISTS pcs_por_pallet numeric(14,3);
+
+UPDATE public.ferramentas_cfg
+SET ferramenta = codigo
+WHERE ferramenta IS NULL AND codigo IS NOT NULL;
+
 COMMENT ON TABLE public.ferramentas_cfg IS 'Configuração básica de ferramentas para uso no frontend.';
 
 DO $$
@@ -339,7 +350,159 @@ COMMENT ON COLUMN public.apontamentos.exp_fluxo_id IS 'Referência opcional para
 COMMENT ON COLUMN public.apontamentos.exp_unidade IS 'Unidade/módulo de expedição associada ao apontamento (ex.: alunica, tecnoperfil).';
 COMMENT ON COLUMN public.apontamentos.exp_stage IS 'Estágio do fluxo EXP (pedido, produzido, para-usinar, para-embarque etc.) no momento do apontamento.';
 
+-- ============================
+-- Movimentações: Insumos e Ferramentas
+-- ============================
+
+-- Tabela de Insumos (catálogo)
+CREATE TABLE IF NOT EXISTS public.exp_insumos (
+  id uuid primary key default gen_random_uuid(),
+  nome text not null,
+  categoria text null,
+  qtd_atual numeric default 0,
+  qtd_minima numeric default 0,
+  unidade text default 'un',
+  criado_por text null,
+  criado_em timestamptz default now(),
+  atualizado_em timestamptz default now(),
+  foto_url text null
+);
+
+-- Baixas do estoque com rastreabilidade por lote
+CREATE TABLE IF NOT EXISTS public.exp_estoque_baixas (
+  id uuid primary key default gen_random_uuid(),
+  produto text,
+  fluxo_id uuid null,
+  lote_codigo text not null,
+  tipo_baixa text not null check (tipo_baixa in ('consumo','venda','producao')),
+  quantidade_pc integer default 0,
+  quantidade_kg numeric default 0,
+  observacao text null,
+  baixado_por text not null,
+  baixado_em timestamptz not null default timezone('utc', now()),
+  estornado boolean default false,
+  estornado_por text null,
+  estornado_em timestamptz null,
+  motivo_estorno text null,
+  created_at timestamptz default timezone('utc', now())
+);
+
+-- Tabela de movimentos de Insumos
+CREATE TABLE IF NOT EXISTS public.exp_insumos_mov (
+  id uuid primary key default gen_random_uuid(),
+  insumo_id uuid null,
+  nome text not null,
+  categoria text null,
+  tipo text not null check (tipo in ('entrada','saida','ajuste')),
+  quantidade numeric(14,3) not null check (quantidade > 0),
+  unidade text null,
+  motivo text null,
+  maquina text null,
+  responsavel text null,
+  observacao text null,
+  created_at timestamptz not null default now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_exp_insumos_mov_nome ON public.exp_insumos_mov (nome);
+CREATE INDEX IF NOT EXISTS idx_exp_insumos_mov_categoria ON public.exp_insumos_mov (categoria);
+CREATE INDEX IF NOT EXISTS idx_exp_insumos_mov_created ON public.exp_insumos_mov (created_at);
+
+-- View de saldo por insumo (Entradas - Saídas +/- Ajustes)
+CREATE OR REPLACE VIEW public.vw_insumos_saldo AS
+SELECT
+  nome,
+  COALESCE(SUM(
+    CASE
+      WHEN tipo = 'entrada' THEN quantidade
+      WHEN tipo = 'saida'   THEN -quantidade
+      WHEN tipo = 'ajuste'  THEN quantidade
+    END
+  ),0) AS saldo
+FROM public.exp_insumos_mov
+GROUP BY nome;
+
+-- View de consumo de insumos nos últimos 30 dias
+CREATE OR REPLACE VIEW public.vw_insumos_consumo_30d AS
+SELECT
+  nome,
+  COALESCE(SUM(quantidade),0) AS consumo_30d
+FROM public.exp_insumos_mov
+WHERE tipo = 'saida'
+  AND created_at >= now() - interval '30 days'
+GROUP BY nome;
+
+-- Tabela de movimentos de Ferramentas
+CREATE TABLE IF NOT EXISTS public.exp_ferramentas_mov (
+  id uuid primary key default gen_random_uuid(),
+  ferramenta text not null,
+  categoria text null,
+  tipo text not null check (tipo in ('entrada','consumo','troca','ajuste','perda')),
+  quantidade numeric(14,3) not null check (quantidade > 0),
+  unidade text null,
+  motivo text null,
+  maquina text null,
+  responsavel text null,
+  observacao text null,
+  created_at timestamptz not null default now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_exp_ferramentas_mov_ferr ON public.exp_ferramentas_mov (ferramenta);
+CREATE INDEX IF NOT EXISTS idx_exp_ferramentas_mov_created ON public.exp_ferramentas_mov (created_at);
+
+-- View: consumo de ferramentas nos últimos 30 dias
+CREATE OR REPLACE VIEW public.vw_ferramentas_consumo_30d AS
+SELECT
+  ferramenta,
+  COALESCE(SUM(quantidade),0) AS consumo_30d
+FROM public.exp_ferramentas_mov
+WHERE tipo IN ('consumo','perda','ajuste')
+  AND created_at >= now() - interval '30 days'
+GROUP BY ferramenta;
+
+-- View: status de vida útil de ferramentas (com base em ferramentas_cfg)
+CREATE OR REPLACE VIEW public.vw_ferramentas_status AS
+SELECT
+  COALESCE(f.ferramenta, f.codigo) AS ferramenta,
+  COALESCE(f.vida_util_dias,0) AS vida_util_dias,
+  f.ultima_troca,
+  CASE
+    WHEN f.vida_util_dias IS NULL OR f.ultima_troca IS NULL THEN NULL
+    ELSE GREATEST(0, f.vida_util_dias - (EXTRACT(EPOCH FROM (now() - f.ultima_troca))/86400)::int)
+  END AS restante_dias,
+  CASE
+    WHEN f.vida_util_dias IS NULL OR f.ultima_troca IS NULL THEN 'inativa'
+    WHEN (GREATEST(0, f.vida_util_dias - (EXTRACT(EPOCH FROM (now() - f.ultima_troca))/86400)::int)) <= 0 THEN 'para trocar'
+    WHEN (GREATEST(0, f.vida_util_dias - (EXTRACT(EPOCH FROM (now() - f.ultima_troca))/86400)::int)) <= CEIL(COALESCE(f.vida_util_dias,0) * 0.2) THEN 'atenção'
+    ELSE 'ativa'
+  END AS status,
+  f.responsavel,
+  f.codigo
+FROM public.ferramentas_cfg f;
+
+-- View: recomendação de reposição de insumos (saldo <= mínimo)
+CREATE OR REPLACE VIEW public.vw_insumos_reposicao AS
+WITH s AS (
+  SELECT i.nome,
+         COALESCE(m.saldo,0) AS saldo,
+         COALESCE(i2.qtd_minima,0) AS minimo
+  FROM (SELECT DISTINCT nome FROM public.exp_insumos_mov) i
+  LEFT JOIN public.vw_insumos_saldo m ON m.nome = i.nome
+  LEFT JOIN public.exp_insumos i2 ON i2.nome = m.nome
+)
+SELECT
+  s.nome,
+  s.saldo,
+  s.minimo,
+  GREATEST(0, s.minimo - s.saldo) AS qtd_recomendada
+FROM s
+WHERE s.minimo > 0 AND s.saldo <= s.minimo;
+
 COMMIT;
+
+-- ============================
+-- NOTIFY PGRST (para recarregar schema no PostgREST/Supabase API)
+-- ============================
+NOTIFY pgrst, 'reload schema';
 
 -- ============================
 -- DOWN (Rollback das alterações)
@@ -414,6 +577,26 @@ BEGIN
     ALTER TABLE public.apontamentos DROP COLUMN IF EXISTS exp_stage;
   END IF;
 END $$;
+
+-- Rollback Movimentações/Views criadas neste patch
+DROP VIEW IF EXISTS public.vw_insumos_reposicao;
+DROP VIEW IF EXISTS public.vw_ferramentas_status;
+DROP VIEW IF EXISTS public.vw_ferramentas_consumo_30d;
+DROP VIEW IF EXISTS public.vw_insumos_consumo_30d;
+DROP VIEW IF EXISTS public.vw_insumos_saldo;
+ALTER TABLE IF EXISTS public.exp_estoque_baixas
+  DROP COLUMN IF EXISTS produto;
+DROP TABLE IF EXISTS public.exp_estoque_baixas;
+DROP TABLE IF EXISTS public.exp_insumos;
+DROP TABLE IF EXISTS public.exp_ferramentas_mov;
+DROP TABLE IF EXISTS public.exp_insumos_mov;
+
+ALTER TABLE IF EXISTS public.ferramentas_cfg
+  DROP COLUMN IF EXISTS ferramenta,
+  DROP COLUMN IF EXISTS responsavel,
+  DROP COLUMN IF EXISTS vida_util_dias,
+  DROP COLUMN IF EXISTS ultima_troca,
+  DROP COLUMN IF EXISTS pcs_por_pallet;
 
 -- Rollback finalização manual
 ALTER TABLE IF EXISTS public.pedidos
