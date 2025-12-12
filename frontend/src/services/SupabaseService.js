@@ -412,6 +412,36 @@ class SupabaseService {
       return Promise.reject(error);
     }
   }
+
+  async uploadImagemEstoque({ bucket, file, path }) {
+    await this.init();
+
+    try {
+      if (!bucket) return Promise.reject(new Error('Bucket não informado.'))
+      if (!file) return Promise.reject(new Error('Arquivo não informado.'))
+      if (!path) return Promise.reject(new Error('Caminho do arquivo não informado.'))
+
+      const { error } = await this.supabase
+        .storage
+        .from(bucket)
+        .upload(path, file, { upsert: true, contentType: file.type || 'application/octet-stream' })
+
+      if (error) {
+        console.error('Erro ao enviar arquivo para o Storage:', error)
+        return Promise.reject(error)
+      }
+
+      const { data } = this.supabase
+        .storage
+        .from(bucket)
+        .getPublicUrl(path)
+
+      return data?.publicUrl || null
+    } catch (error) {
+      console.error('Erro ao enviar arquivo para o Storage:', error)
+      return Promise.reject(error)
+    }
+  }
 }
 
 // Exporta uma instância única do serviço

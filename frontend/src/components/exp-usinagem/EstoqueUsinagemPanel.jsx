@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { FaUpload, FaClipboardCheck, FaMinusCircle } from 'react-icons/fa'
 import * as XLSX from 'xlsx'
 import { formatDateBR, formatInteger, formatNumber, toDecimal, toIntegerRound } from '../../utils/expUsinagem'
@@ -25,13 +25,55 @@ const EstoqueUsinagemPanel = ({
   // Estados do modal de baixa
   const [baixaModalOpen, setBaixaModalOpen] = useState(false)
   const [selectedItem, setSelectedItem] = useState(null)
+  const [lotesDisponiveis, setLotesDisponiveis] = useState([])
   const [baixaSaving, setBaixaSaving] = useState(false)
   const [baixaError, setBaixaError] = useState(null)
+  const [baixasPorFluxo, setBaixasPorFluxo] = useState({})
 
   const byIdRaw = (Array.isArray(fluxoPedidos) ? fluxoPedidos : []).reduce((acc, r) => {
     if (r && r.id) acc[String(r.id)] = r
     return acc
   }, /** @type {Record<string, any>} */({}))
+
+  // Carrega baixas de estoque da nova tabela exp_estoque_baixas
+  const loadBaixas = async (fluxoList) => {
+    try {
+      const ids = (Array.isArray(fluxoList) ? fluxoList : [])
+        .map((r) => r && r.id)
+        .filter(Boolean)
+
+      if (!ids.length) {
+        setBaixasPorFluxo({})
+        return
+      }
+
+      const baixas = await supabaseService.getByIn('exp_estoque_baixas', 'fluxo_id', ids)
+      const map = /** @type {Record<string, { baixadoPc: number, baixadoKg: number }>} */({})
+
+      ;(Array.isArray(baixas) ? baixas : []).forEach((baixa) => {
+        if (!baixa || baixa.estornado) return // Ignora baixas estornadas
+
+        const key = String(baixa.fluxo_id)
+        if (!map[key]) {
+          map[key] = { baixadoPc: 0, baixadoKg: 0 }
+        }
+
+        const qtdPc = toIntegerRound(baixa.quantidade_pc) || 0
+        const qtdKg = toDecimal(baixa.quantidade_kg) || 0
+        map[key].baixadoPc += qtdPc
+        map[key].baixadoKg += qtdKg
+      })
+
+      setBaixasPorFluxo(map)
+    } catch (e) {
+      console.error('Erro ao carregar baixas de estoque:', e)
+      setBaixasPorFluxo({})
+    }
+  }
+
+  useEffect(() => {
+    loadBaixas(fluxoPedidos)
+  }, [fluxoPedidos])
 
   const rowsBase = (Array.isArray(pedidosTecnoPerfil) ? pedidosTecnoPerfil : []).map((p) => {
     const raw = byIdRaw[String(p.id)] || {}
@@ -39,8 +81,11 @@ const EstoqueUsinagemPanel = ({
     const pedidoKg = Number(p.pedidoKgNumber ?? 0)
     const apontPc = toIntegerRound(raw.saldo_pc_total) || 0
     const apontKg = toDecimal(raw.saldo_kg_total) || 0
-    const saldoPc = Math.max(pedidoPc - apontPc, 0)
-    const saldoKg = Math.max(pedidoKg - apontKg, 0)
+    const baixas = baixasPorFluxo[String(p.id)] || {}
+    const baixadoPc = toIntegerRound(baixas.baixadoPc) || 0
+    const baixadoKg = toDecimal(baixas.baixadoKg) || 0
+    const estoquePc = Math.max(apontPc - baixadoPc, 0)
+    const estoqueKg = Math.max(apontKg - baixadoKg, 0)
     const updatedAt = raw.atualizado_em || raw.movimentado_em || raw.saldo_atualizado_em || raw.criado_em
     const statusTecno = p.status
     const isAlunica = Array.isArray(Object.keys(alunicaStages)) && Boolean(alunicaStages[String(p.id)])
@@ -59,8 +104,8 @@ const EstoqueUsinagemPanel = ({
       pedidoPc,
       apontKg,
       apontPc,
-      saldoKg,
-      saldoPc,
+      estoqueKg,
+      estoquePc,
       updatedAt
     }
   })
@@ -71,15 +116,13 @@ const EstoqueUsinagemPanel = ({
   const filtered = rowsBase.filter((r) => {
     if (estoqueUnidade === 'tecno' && r.unidade !== 'TecnoPerfil') return false
     if (estoqueUnidade === 'alunica' && r.unidade !== 'Alúnica') return false
-
-    // Esconder itens sem saldo por padrão (todas/com), mantendo-os visíveis apenas quando filtro for 'sem'
-    if (estoqueSituacao !== 'sem' && r.saldoKg === 0 && r.saldoPc === 0) return false
-
+    // Estoque da usinagem: só faz sentido para pedidos que já tiveram produção apontada
+    if (r.apontPc === 0 && r.apontKg === 0) return false
     if (estoqueSituacao === 'com') {
-      if (!((r.saldoKg > 0) || (r.saldoPc > 0))) return false
+      if (!((r.estoqueKg > 0) || (r.estoquePc > 0))) return false
     }
     if (estoqueSituacao === 'sem') {
-      if (!((r.saldoKg === 0) && (r.saldoPc === 0))) return false
+      if (!((r.estoqueKg === 0) && (r.estoquePc === 0))) return false
     }
     if (maxAge > 0 && r.updatedAt) {
       const t = new Date(r.updatedAt).getTime()
@@ -92,11 +135,63 @@ const EstoqueUsinagemPanel = ({
     return true
   })
 
-  // Abrir modal de baixa
-  const handleOpenBaixa = (item) => {
+  // Abrir modal de baixa e carregar lotes disponíveis
+  const handleOpenBaixa = async (item) => {
     setSelectedItem(item)
-    setBaixaModalOpen(true)
     setBaixaError(null)
+    
+    try {
+      // Buscar apontamentos do pedido que estão em para-embarque (prontos para baixa)
+      const apontamentos = await supabaseService.getByIndex('apontamentos', 'exp_fluxo_id', item.id)
+      
+      // Filtrar apenas lotes de embalagem (para-embarque)
+      const lotesEmbalagem = (Array.isArray(apontamentos) ? apontamentos : [])
+        .filter(apont => apont && apont.exp_unidade === 'alunica' && apont.exp_stage === 'para-embarque')
+      
+      // Buscar baixas já realizadas para calcular disponível
+      const baixasExistentes = await supabaseService.getByIndex('exp_estoque_baixas', 'fluxo_id', item.id)
+      const baixasPorLote = {}
+      
+      ;(Array.isArray(baixasExistentes) ? baixasExistentes : []).forEach(baixa => {
+        if (baixa.estornado) return
+        const key = baixa.lote_codigo
+        if (!baixasPorLote[key]) {
+          baixasPorLote[key] = { pc: 0, kg: 0 }
+        }
+        baixasPorLote[key].pc += toIntegerRound(baixa.quantidade_pc) || 0
+        baixasPorLote[key].kg += toDecimal(baixa.quantidade_kg) || 0
+      })
+      
+      // Montar lista de lotes com disponível
+      const lotes = lotesEmbalagem.map(apont => {
+        const baixado = baixasPorLote[apont.lote] || { pc: 0, kg: 0 }
+        const qtdApont = toIntegerRound(apont.quantidade) || 0
+        const dispPc = Math.max(qtdApont - baixado.pc, 0)
+        
+        // Calcular Kg proporcional (se houver)
+        const kgPorPc = qtdApont > 0 && item.pedidoKg > 0 && item.pedidoPc > 0
+          ? item.pedidoKg / item.pedidoPc
+          : 0
+        const kgApont = kgPorPc > 0 ? qtdApont * kgPorPc : 0
+        const dispKg = Math.max(kgApont - baixado.kg, 0)
+        
+        return {
+          id: apont.id,
+          lote_codigo: apont.lote,
+          lote_externo: apont.lote_externo,
+          disponivel_pc: dispPc,
+          disponivel_kg: dispKg
+        }
+      }).filter(lote => lote.disponivel_pc > 0 || lote.disponivel_kg > 0)
+      
+      setLotesDisponiveis(lotes)
+      setBaixaModalOpen(true)
+    } catch (error) {
+      console.error('Erro ao carregar lotes:', error)
+      setBaixaError('Erro ao carregar lotes disponíveis.')
+      setLotesDisponiveis([])
+      setBaixaModalOpen(true)
+    }
   }
 
   // Fechar modal de baixa
@@ -108,55 +203,40 @@ const EstoqueUsinagemPanel = ({
     }
   }
 
-  // Confirmar baixa de estoque
+  // Confirmar baixa de estoque com rastreabilidade por lote
   const handleConfirmBaixa = async (dados) => {
     setBaixaSaving(true)
     setBaixaError(null)
 
     try {
-      const { item, tipoBaixa, quantidadePc, quantidadeKg, observacao } = dados
+      const { item, tipoBaixa, baixasPorLote, observacao } = dados
 
-      const agora = new Date().toISOString()
+      // Salvar cada baixa de lote na nova tabela exp_estoque_baixas
+      for (const baixa of baixasPorLote) {
+        const registro = {
+          fluxo_id: item.id,
+          lote_codigo: baixa.lote_codigo,
+          tipo_baixa: tipoBaixa,
+          quantidade_pc: baixa.quantidade_pc,
+          quantidade_kg: baixa.quantidade_kg,
+          observacao: observacao || null,
+          baixado_por: 'Sistema', // TODO: Substituir por usuário autenticado
+          estornado: false
+        }
 
-      // Criar registro de movimentação de estoque compatível com o schema exp_pedidos_movimentacoes
-      const movimentacao = {
-        fluxo_id: item.id,
-        status_anterior: item.estagio || null,
-        status_novo: item.estagio || null,
-        motivo: observacao || (tipoBaixa === 'venda' ? 'baixa_venda' : 'baixa_consumo'),
-        movimentado_por: 'Sistema', // Pode ser substituído por user atual
-        movimentado_em: agora,
-        tipo_movimentacao: 'quantidade',
-        pc_movimentado: quantidadePc,
-        kg_movimentado: quantidadeKg
+        await supabaseService.add('exp_estoque_baixas', registro)
       }
 
-      // Salvar movimentação
-      await supabaseService.add('exp_pedidos_movimentacoes', movimentacao)
+      // Recarregar baixas
+      await loadBaixas(fluxoPedidos)
 
-      // Buscar registro atual do fluxo
-      const fluxoAtual = byIdRaw[String(item.id)] || {}
-      const saldoPcAtual = toIntegerRound(fluxoAtual.saldo_pc_total) || 0
-      const saldoKgAtual = toDecimal(fluxoAtual.saldo_kg_total) || 0
-
-      // Atualizar saldos no fluxo - SOMAR a quantidade baixada ao saldo_pc_total/kg_total
-      // (isso faz o saldo disponível diminuir, pois saldo = pedido - apontado)
-      const novoSaldoPc = saldoPcAtual + (toIntegerRound(quantidadePc) || 0)
-      const novoSaldoKg = saldoKgAtual + (toDecimal(quantidadeKg) || 0)
-
-      await supabaseService.update('exp_pedidos_fluxo', {
-        id: item.id,
-        saldo_pc_total: novoSaldoPc,
-        saldo_kg_total: novoSaldoKg,
-        saldo_atualizado_em: agora
-      })
-
-      // Recarregar dados para atualizar UI
-      if (typeof window !== 'undefined') {
-        window.location.reload()
-      }
+      // Fechar modal
+      handleCloseBaixa()
       
-      alert(`Baixa de estoque registrada com sucesso!\nTipo: ${tipoBaixa}\nPc: ${quantidadePc} | Kg: ${quantidadeKg}`)
+      const totalPc = baixasPorLote.reduce((acc, b) => acc + b.quantidade_pc, 0)
+      const totalKg = baixasPorLote.reduce((acc, b) => acc + b.quantidade_kg, 0)
+      
+      alert(`Baixa de estoque registrada com sucesso!\nTipo: ${tipoBaixa}\nLotes: ${baixasPorLote.length}\nTotal Pc: ${totalPc} | Total Kg: ${totalKg.toFixed(3)}`)
     } catch (error) {
       console.error('Erro ao dar baixa no estoque:', error)
       setBaixaError(error?.message || 'Falha ao processar baixa.')
@@ -181,8 +261,8 @@ const EstoqueUsinagemPanel = ({
         'Pedido Pc': r.pedidoPc,
         'Apontado Kg': r.apontKg,
         'Apontado Pc': r.apontPc,
-        'Saldo Kg': r.saldoKg,
-        'Saldo Pc': r.saldoPc,
+        'Estoque Kg': r.estoqueKg,
+        'Estoque Pc': r.estoquePc,
         'Último movimento': r.updatedAt ? formatDateBR(r.updatedAt) : '—'
       }))
       const ws = XLSX.utils.json_to_sheet(rows)
@@ -245,8 +325,8 @@ const EstoqueUsinagemPanel = ({
               <th className="py-2 pr-3 text-right">Pedido Pc</th>
               <th className="py-2 pr-3 text-right">Apontado Kg</th>
               <th className="py-2 pr-3 text-right">Apontado Pc</th>
-              <th className="py-2 pr-3 text-right">Saldo Kg</th>
-              <th className="py-2 pr-3 text-right">Saldo Pc</th>
+              <th className="py-2 pr-3 text-right">Estoque Kg</th>
+              <th className="py-2 pr-3 text-right">Estoque Pc</th>
               <th className="py-2 pr-3">Último movimento</th>
               <th className="py-2 pr-3">Ações</th>
             </tr>
@@ -264,8 +344,8 @@ const EstoqueUsinagemPanel = ({
                 <td className="py-2 pr-3 text-right">{formatInteger(r.pedidoPc)}</td>
                 <td className="py-2 pr-3 text-right">{formatNumber(r.apontKg)}</td>
                 <td className="py-2 pr-3 text-right">{formatInteger(r.apontPc)}</td>
-                <td className="py-2 pr-3 text-right">{formatNumber(r.saldoKg)}</td>
-                <td className="py-2 pr-3 text-right">{formatInteger(r.saldoPc)}</td>
+                <td className="py-2 pr-3 text-right">{formatNumber(r.estoqueKg)}</td>
+                <td className="py-2 pr-3 text-right">{formatInteger(r.estoquePc)}</td>
                 <td className="py-2 pr-3">{r.updatedAt ? formatDateBR(r.updatedAt) : '—'}</td>
                 <td className="py-2 pr-3">
                   <button
@@ -289,6 +369,7 @@ const EstoqueUsinagemPanel = ({
       <BaixaEstoqueModal
         open={baixaModalOpen}
         item={selectedItem}
+        lotesDisponiveis={lotesDisponiveis}
         onClose={handleCloseBaixa}
         onConfirm={handleConfirmBaixa}
         saving={baixaSaving}

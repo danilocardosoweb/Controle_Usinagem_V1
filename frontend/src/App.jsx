@@ -1,18 +1,21 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
+import { ToastProvider } from './contexts/ToastContext'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import ApontamentosUsinagem from './pages/ApontamentosUsinagem'
+import ApontamentosEmbalagem from './pages/ApontamentosEmbalagem'
+import Estoque from './pages/Estoque'
 import ApontamentosParadas from './pages/ApontamentosParadas'
 import CarteiraEncomendas from './pages/CarteiraEncomendas'
 import Relatorios from './pages/Relatorios'
 import PrevisaoTrabalho from './pages/PrevisaoTrabalho'
-import ExpUsinagem from './pages/ExpUsinagem'
 import Configuracoes from './pages/Configuracoes'
 import Pedidos from './pages/Pedidos'
 import PCP from './pages/PCP'
 import Layout from './components/Layout'
 import ProtectedRoute from './components/ProtectedRoute'
+import ToastContainer from './components/ToastContainer'
 
 function App() {
   const { user, login } = useAuth()
@@ -26,12 +29,13 @@ function App() {
   }
 
   return (
-    <Routes>
-      <Route path="/login" element={
-        !isAuthenticated 
-          ? <Login onLogin={handleLogin} /> 
-          : <Navigate to="/dashboard" replace />
-      } />
+    <ToastProvider>
+      <Routes>
+        <Route path="/login" element={
+          !isAuthenticated 
+            ? <Login onLogin={handleLogin} /> 
+            : <Navigate to="/dashboard" replace />
+        } />
       
       {/* Rotas protegidas */}
       <Route path="/" element={
@@ -42,10 +46,12 @@ function App() {
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="apontamentos-usinagem" element={<ApontamentosUsinagem />} />
+        <Route path="apontamentos-embalagem" element={<ApontamentosEmbalagem />} />
+        <Route path="estoque" element={<Estoque />} />
         <Route path="apontamentos-paradas" element={<ApontamentosParadas />} />
         <Route path="relatorios" element={<Relatorios />} />
         <Route path="previsao-trabalho" element={<PrevisaoTrabalho />} />
-        <Route path="exp-usinagem" element={<ExpUsinagem />} />
+        {/** Rota removida: EXP - Usinagem desativada */}
         <Route path="pcp" element={<PCP />} />
         <Route path="configuracoes" element={
           <ProtectedRoute allowedRoles={['admin']}>
@@ -58,7 +64,9 @@ function App() {
       
       {/* Redirecionar para login se não autenticado */}
       <Route path="*" element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />} />
-    </Routes>
+      </Routes>
+      <ToastContainer />
+    </ToastProvider>
   )
 }
 

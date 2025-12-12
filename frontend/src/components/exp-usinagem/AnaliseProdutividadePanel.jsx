@@ -68,7 +68,7 @@ const AnaliseProdutividadePanel = () => {
     if (diasAtras > 0) {
       const dataLimite = new Date()
       dataLimite.setDate(dataLimite.getDate() - diasAtras)
-      
+
       filtrados = filtrados.filter(a => {
         if (!a.created_at) return false
         const dataApont = new Date(a.created_at)
@@ -161,7 +161,7 @@ const AnaliseProdutividadePanel = () => {
       if (a.created_at) {
         const data = new Date(a.created_at)
         const diaKey = data.toISOString().split('T')[0] // YYYY-MM-DD
-        
+
         if (!porDia[diaKey]) {
           porDia[diaKey] = {
             data: diaKey,
@@ -170,7 +170,7 @@ const AnaliseProdutividadePanel = () => {
             apontamentos: 0
           }
         }
-        
+
         porDia[diaKey].pecas += qtd
         porDia[diaKey].apontamentos += 1
         porDia[diaKey].minutos += diffMin
@@ -179,7 +179,7 @@ const AnaliseProdutividadePanel = () => {
         const semana = getISOWeek(data)
         const ano = data.getFullYear()
         const semanaKey = `${ano}-S${semana}`
-        
+
         if (!porSemana[semanaKey]) {
           porSemana[semanaKey] = {
             semana: semanaKey,
@@ -188,7 +188,7 @@ const AnaliseProdutividadePanel = () => {
             apontamentos: 0
           }
         }
-        
+
         porSemana[semanaKey].pecas += qtd
         porSemana[semanaKey].apontamentos += 1
         porSemana[semanaKey].minutos += diffMin
@@ -258,7 +258,7 @@ const AnaliseProdutividadePanel = () => {
   }, [apontamentosFiltrados])
 
   // Função para calcular semana ISO
-  function getISOWeek (date) {
+  function getISOWeek(date) {
     const d = new Date(date)
     d.setHours(0, 0, 0, 0)
     d.setDate(d.getDate() + 4 - (d.getDay() || 7))
@@ -575,7 +575,7 @@ const AnaliseProdutividadePanel = () => {
           <p className="text-xs font-semibold uppercase opacity-80">Usinagem (Geral)</p>
           <p className="mt-2 text-2xl font-bold">{formatNumber(metricas.usinagem.pecasPorHora)}</p>
           <p className="mt-1 text-xs opacity-80">
-            {formatInteger(metricas.usinagem.totalPecas)} peças 
+            {formatInteger(metricas.usinagem.totalPecas)} peças
             {' · '}
             {formatNumber(metricas.usinagem.totalHoras)} h
           </p>
@@ -585,7 +585,7 @@ const AnaliseProdutividadePanel = () => {
           <p className="text-xs font-semibold uppercase opacity-80">Inspeção (Alúnica)</p>
           <p className="mt-2 text-2xl font-bold">{formatNumber(metricas.inspecao.pecasPorHora)}</p>
           <p className="mt-1 text-xs opacity-80">
-            {formatInteger(metricas.inspecao.totalPecas)} peças 
+            {formatInteger(metricas.inspecao.totalPecas)} peças
             {' · '}
             {formatNumber(metricas.inspecao.totalHoras)} h
           </p>
@@ -595,7 +595,7 @@ const AnaliseProdutividadePanel = () => {
           <p className="text-xs font-semibold uppercase opacity-80">Embalagem (Alúnica)</p>
           <p className="mt-2 text-2xl font-bold">{formatNumber(metricas.embalagem.pecasPorHora)}</p>
           <p className="mt-1 text-xs opacity-80">
-            {formatInteger(metricas.embalagem.totalPecas)} peças 
+            {formatInteger(metricas.embalagem.totalPecas)} peças
             {' · '}
             {formatNumber(metricas.embalagem.totalHoras)} h
           </p>

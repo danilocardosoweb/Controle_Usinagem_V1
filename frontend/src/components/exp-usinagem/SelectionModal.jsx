@@ -49,7 +49,7 @@ const SelectionModal = ({
             onClick={() => setSelectionTab('carteira')}
             className={`rounded-md px-3 py-1 transition ${selectionTab === 'carteira' ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-100'}`}
           >
-            Carteira de pedidos ({pedidosCarteira.length})
+            Carteira de pedidos ({(pedidosCarteira || []).length})
           </button>
         </div>
 
@@ -115,7 +115,7 @@ const SelectionModal = ({
                 </table>
               </div>
             )
-          ) : pedidosCarteira.length === 0 ? (
+          ) : !pedidosCarteira || pedidosCarteira.length === 0 ? (
             <div className="rounded-md border border-dashed border-gray-300 bg-gray-50 px-4 py-4 text-sm text-gray-600">
               Nenhum pedido da carteira disponível para seleção (ou já está na TecnoPerfil).
             </div>
@@ -128,7 +128,7 @@ const SelectionModal = ({
                       <input
                         type="checkbox"
                         className="h-4 w-4 rounded border-gray-300"
-                        checked={selectedCarteira.length > 0 && selectedCarteira.length === pedidosCarteira.length}
+                        checked={selectedCarteira.length > 0 && selectedCarteira.length === (pedidosCarteira || []).length}
                         onChange={(event) => {
                           if (event.target.checked) {
                             setSelectedCarteira(pedidosCarteira.map((item) => item.pedido_id))
@@ -148,7 +148,7 @@ const SelectionModal = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {pedidosCarteira.map((item) => (
+                  {(pedidosCarteira || []).map((item) => (
                     <tr key={`carteira-${item.pedido_id}`} className="align-top hover:bg-blue-50/40">
                       <td className="py-2 pr-3">
                         <input

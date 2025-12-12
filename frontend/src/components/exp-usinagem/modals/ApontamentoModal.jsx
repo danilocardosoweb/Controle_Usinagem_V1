@@ -1,11 +1,12 @@
-import React from 'react';
-import { FaTimes, FaMagic } from 'react-icons/fa';
+import React, { useMemo } from 'react';
+import { FaTimes } from 'react-icons/fa';
 import { 
   formatInteger, 
   formatNumber, 
   toIntegerRound, 
   toDecimal 
 } from '../../../utils/expUsinagem';
+import { summarizeApontamentos } from '../../../utils/apontamentosLogic';
 
 /**
  * Modal de Apontamento de Produção da Alúnica
@@ -24,6 +25,7 @@ import {
  * @param {boolean} props.saving - Se está salvando
  * @param {string} props.error - Mensagem de erro
  * @param {Array} props.fluxoPedidos - Pedidos do fluxo
+ * @param {Object} props.apontamentosPorFluxo - Histórico de apontamentos agrupados por fluxo/id
  * @param {Function} props.onClose - Handler de fechar
  * @param {Function} props.onSave - Handler de salvar
  * @param {Function} props.onQtdPcChange - Handler de mudança de qtd total
@@ -31,7 +33,6 @@ import {
  * @param {Function} props.onObsChange - Handler de mudança de observações
  * @param {Function} props.onInicioChange - Handler de mudança de início
  * @param {Function} props.onFimChange - Handler de mudança de fim
- * @param {Function} props.onSugerirDistribuicao - Handler para sugerir distribuição automática
  */
 const ApontamentoModal = ({
   open,
@@ -45,20 +46,23 @@ const ApontamentoModal = ({
   saving,
   error,
   fluxoPedidos,
+  apontamentosPorFluxo,
   onClose,
   onSave,
   onQtdPcChange,
   onQtdPcInspecaoChange,
   onObsChange,
   onInicioChange,
-  onFimChange,
-  onSugerirDistribuicao
+  onFimChange
 }) => {
   if (!open) return null;
 
   const fluxoAtual = Array.isArray(fluxoPedidos)
     ? fluxoPedidos.find((f) => String(f.id) === String(pedido?.id))
     : null;
+  const apontamentosPedido = apontamentosPorFluxo && pedido?.id
+    ? apontamentosPorFluxo[String(pedido.id)] || []
+    : [];
 
   const pedidoPcTotal = toIntegerRound(
     pedido?.pedidoPcNumber ?? pedido?.pedidoPc
@@ -74,13 +78,86 @@ const ApontamentoModal = ({
   const saldoKg = Math.max(pedidoKgTotal - apontadoKg, 0);
 
   const total = toIntegerRound(qtdPc) || 0;
-  const insp = stage === 'para-embarque' ? 0 : (toIntegerRound(qtdPcInspecao) || 0);
-  const emb = Math.max(total - insp, 0);
+  
+  // ✅ Detectar estágio
+  const isStageUsinar = stage === 'para-usinar';
+  const isStageInspecao = stage === 'para-inspecao';
   const isStageEmbalagem = stage === 'para-embarque';
-  const gridColsClass = isStageEmbalagem ? 'sm:grid-cols-2' : 'sm:grid-cols-3';
-  const instructionText = isStageEmbalagem
-    ? 'Informe a quantidade embalada e o período trabalhado nesta atividade.'
-    : 'Informe a quantidade total produzida em peças e quantas vão para inspeção. Pelo menos 20 peças devem passar por inspeção antes de enviar o restante direto para embalagem.';
+  
+  const insp = isStageUsinar ? (toIntegerRound(qtdPcInspecao) || 0) : 0;
+  const emb = isStageUsinar ? Math.max(total - insp, 0) : 0;
+
+  const resumoEmbalagem = useMemo(() => (
+    isStageEmbalagem
+      ? summarizeApontamentos(apontamentosPedido, ['para-embarque']) || []
+      : []
+  ), [apontamentosPedido, isStageEmbalagem]);
+
+  const disponivelParaEmbalar = useMemo(
+    () => resumoEmbalagem.reduce((acc, lote) => acc + (toIntegerRound(lote?.embalagem) || 0), 0),
+    [resumoEmbalagem]
+  );
+
+  const saldoAposApontar = useMemo(() => {
+    if (!isStageEmbalagem) return null;
+    const diff = disponivelParaEmbalar - emb;
+    return diff < 0 ? 0 : diff;
+  }, [isStageEmbalagem, disponivelParaEmbalar, emb]);
+
+  const excedeDisponivel = isStageEmbalagem && emb > disponivelParaEmbalar && disponivelParaEmbalar > 0;
+
+  const renderResumoEmbalagem = () => {
+    if (!isStageEmbalagem || !resumoEmbalagem.length) return null;
+    return (
+      <div className="rounded-md border border-violet-100 bg-violet-50 px-3 py-3 text-xs text-violet-800">
+        <div className="flex flex-wrap items-center justify-between gap-4 text-sm text-violet-900">
+          <div className="flex flex-col">
+            <span className="font-semibold uppercase text-[11px] text-violet-700">Disponível para Embalar (Pc)</span>
+            <span className="text-lg font-bold">{formatInteger(disponivelParaEmbalar)}</span>
+          </div>
+          {saldoAposApontar !== null && (
+            <div className="flex flex-col text-right">
+              <span className="font-semibold uppercase text-[11px] text-violet-700">Saldo após este apontamento</span>
+              <span className={`text-lg font-bold ${excedeDisponivel ? 'text-red-600' : 'text-emerald-700'}`}>
+                {formatInteger(Math.max(saldoAposApontar, 0))}
+              </span>
+            </div>
+          )}
+        </div>
+        {excedeDisponivel && (
+          <p className="mt-2 rounded border border-red-200 bg-white/70 px-2 py-1 text-[11px] font-medium text-red-700">
+            Quantidade informada ({formatInteger(emb)}) excede o saldo disponível. Ajuste antes de salvar.
+          </p>
+        )}
+        <div className="mt-3 overflow-x-auto">
+          <table className="min-w-full text-[11px] text-violet-900">
+            <thead>
+              <tr className="uppercase tracking-wide">
+                <th className="py-1 pr-3 text-left">Lote de Usinagem</th>
+                <th className="py-1 pr-3 text-left">Lote de Embalagem</th>
+                <th className="py-1 pr-3 text-right">Disponível (Pc)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-violet-100">
+              {resumoEmbalagem.map((lote) => (
+                <tr key={`emb-resumo-${pedido?.id}-${lote.lote}`}>
+                  <td className="py-1 pr-3 font-medium">{lote.loteExterno || '—'}</td>
+                  <td className="py-1 pr-3 font-semibold">{lote.lote}</td>
+                  <td className="py-1 pr-3 text-right">{formatInteger(lote.embalagem)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+  const gridColsClass = isStageUsinar ? 'sm:grid-cols-3' : 'sm:grid-cols-2';
+  const instructionText = isStageUsinar
+    ? 'Informe a quantidade total produzida em peças e quantas vão para inspeção. Pelo menos 20 peças devem passar por inspeção antes de enviar o restante direto para embalagem.'
+    : isStageInspecao
+    ? 'Informe a quantidade inspecionada e aprovada para embalagem.'
+    : 'Informe a quantidade efetivamente embalada e o período trabalhado nesta atividade.';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
@@ -88,7 +165,7 @@ const ApontamentoModal = ({
         <div className="flex items-center justify-between border-b px-6 py-4">
           <div>
             <h2 className="text-lg font-semibold text-gray-800">
-              Apontar produção - Alúnica
+              {isStageUsinar ? 'Apontar produção - Alúnica' : isStageInspecao ? 'Apontar inspeção - Alúnica' : 'Apontar embalagem – Alúnica'}
             </h2>
             {pedido && (
               <p className="text-xs text-gray-500">
@@ -129,6 +206,8 @@ const ApontamentoModal = ({
             </div>
           )}
 
+          {renderResumoEmbalagem()}
+
           {error && (
             <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-600">
               {error}
@@ -150,7 +229,7 @@ const ApontamentoModal = ({
                 disabled={saving}
               />
             </div>
-            {!isStageEmbalagem && (
+            {isStageUsinar && (
               <>
                 <div className="sm:col-span-1">
                   <label className="mb-1 block text-xs font-semibold uppercase text-gray-500">
@@ -180,25 +259,6 @@ const ApontamentoModal = ({
                 </div>
               </>
             )}
-          </div>
-
-          {/* Botão de sugestão de distribuição */}
-          {!isStageEmbalagem && onSugerirDistribuicao && (
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={onSugerirDistribuicao}
-                disabled={saving || !qtdPc || toIntegerRound(qtdPc) === 0}
-                className="inline-flex items-center gap-2 rounded-md border border-purple-300 bg-purple-50 px-3 py-1.5 text-xs font-semibold text-purple-700 transition hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-60"
-                title="Preencher automaticamente baseado em boas práticas"
-              >
-                <FaMagic className="h-3 w-3" />
-                Sugerir Distribuição
-              </button>
-            </div>
-          )}
-
-          <div className="grid gap-3 sm:grid-cols-2">
             <div className="sm:col-span-1">
               <label className="mb-1 block text-xs font-semibold uppercase text-gray-500">
                 Início

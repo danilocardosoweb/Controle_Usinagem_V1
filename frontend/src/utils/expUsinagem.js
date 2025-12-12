@@ -389,6 +389,8 @@ export const buildPedidoBase = (values, original = {}, fonte = 'carteira') => {
     ferramenta: ferramenta || undefined,
     pedido_kg: pedidoKg ?? undefined,
     pedido_pc: pedidoPc ?? undefined,
+    item_perfil: values.itemPerfil || original['item.perfil'] || original['Item.Perfil'] || original['perfil'] || undefined,
+    item_do_cliente: values.itemDoCliente || original['item.do.cliente'] || original['Item do Cliente'] || undefined,
     fonte_exp_usinagem: fonte
   }
 
@@ -423,6 +425,12 @@ export const buildFluxoRecordFromBase = (base, origem = 'carteira', extras = {})
     ferramenta: base.ferramenta || null,
     pedido_kg: base.pedidoKg,
     pedido_pc: base.pedidoPc,
+    // Inicializa saldos disponíveis com o total do pedido
+    kg_disponivel: base.pedidoKg ?? 0,
+    pc_disponivel: base.pedidoPc ?? 0,
+    // Saldos acumulados começam zerados
+    saldo_kg_total: 0,
+    saldo_pc_total: 0,
     status_atual: mapStageToDb(DEFAULT_STAGE),
     dados_originais: base.dadosOriginais,
     selecionado_por: extras.selecionadoPor || null,
@@ -460,6 +468,8 @@ export const mapRowToImportadoRecord = (row, extras = {}) => {
   const ferramenta = extractFromSources([row], ['ferramenta', 'produto', 'codigo produto'])
   const pedidoKg = extractFromSources([row], ['pedido kg', 'pedido_kg', 'kg', 'peso kg'])
   const pedidoPc = extractFromSources([row], ['pedido pc', 'pedido_pc', 'quantidade', 'qtd', 'qtd_pedido'])
+  const itemPerfil = extractFromSources([row], ['item.perfil', 'item perfil', 'perfil', 'perfil longo', 'item_perfil'])
+  const itemDoCliente = extractFromSources([row], ['item.do.cliente', 'item do cliente', 'item_do_cliente'])
 
   const base = buildPedidoBase(
     { pedido, cliente, numeroPedido, dataEntrega, ferramenta, pedidoKg, pedidoPc },

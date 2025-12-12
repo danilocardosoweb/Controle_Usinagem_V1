@@ -1,4 +1,5 @@
 import { Fragment } from 'react'
+import { formatInteger } from '../../utils/expUsinagem'
 
 const TABLE_HEADERS_DEFAULT = [
   'Pedido',
@@ -103,7 +104,46 @@ const AlunicaStageCard = ({ status, orders, renderActions, renderDetails, compac
                       {renderDetails(pedido)}
                     </td>
                   </tr>
-                ) : null}
+                ) : (
+                  <tr>
+                    <td colSpan={10} className="bg-purple-50/30 px-3 pb-3">
+                      {(() => {
+                        const resumo = Array.isArray(pedido.resumoLotes) ? pedido.resumoLotes : []
+                        if (!resumo.length) return null
+                        const coluna = status.key === 'para-inspecao' ? 'inspecao' : 'embalagem'
+                        const tituloQtd = status.key === 'para-inspecao' ? 'Qtd para Inspeção (Pc)' : 'Qtd para Embalagem (Pc)'
+                        return (
+                          <div className="mt-1 overflow-x-auto">
+                            <table className="min-w-full text-[12px] text-gray-700">
+                              <thead>
+                                <tr className="text-[11px] uppercase tracking-wide text-gray-500">
+                                  <th className="py-1 pr-3">Lote Usinagem</th>
+                                  <th className="py-1 pr-3">Lote {status.key === 'para-inspecao' ? 'Inspeção' : 'Embalagem'}</th>
+                                  <th className="py-1 pr-3 text-right">{tituloQtd}</th>
+                                  <th className="py-1 pr-3">Início</th>
+                                  <th className="py-1 pr-3">Fim</th>
+                                  <th className="py-1 pr-3">Observações</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-100">
+                                {resumo.map((r) => (
+                                  <tr key={`res-${pedido.id}-${status.key}-${r.lote}`}>
+                                    <td className="py-1 pr-3 font-medium text-gray-700">{r.loteExterno || '—'}</td>
+                                    <td className="py-1 pr-3 font-semibold text-gray-800">{r.lote}</td>
+                                    <td className="py-1 pr-3 text-right">{formatInteger(r[coluna])}</td>
+                                    <td className="py-1 pr-3">{fmtDT(r.inicio)}</td>
+                                    <td className="py-1 pr-3">{fmtDT(r.fim)}</td>
+                                    <td className="py-1 pr-3">{r.obs || '—'}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )
+                      })()}
+                    </td>
+                  </tr>
+                )}
                 </Fragment>
                 )})}
             </tbody>

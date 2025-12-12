@@ -100,7 +100,7 @@ export const useApontamentoModal = ({
       setQtdPc('');
       setQtdPcInspecao('');
       setObs('');
-      
+
       // Auto-preenche data/hora
       const now = new Date();
       const startStr = toLocalDateTimeInput(now);
@@ -121,7 +121,7 @@ export const useApontamentoModal = ({
    */
   const closeModal = useCallback(() => {
     if (saving) return;
-    
+
     setOpen(false);
     setPedido(null);
     setStage(null);
@@ -151,29 +151,6 @@ export const useApontamentoModal = ({
     setFimTouched(true);
     setFim(value);
   }, []);
-
-  /**
-   * Sugere distribuição automática baseada em boas práticas
-   * - Se quantidade >= 100: 30% para inspeção (min 20, max 50)
-   * - Se quantidade < 100: tudo para inspeção
-   */
-  const handleSugerirDistribuicao = useCallback(() => {
-    const total = toIntegerRound(qtdPc) || 0;
-    if (total === 0) {
-      setError('Informe a quantidade produzida primeiro.');
-      return;
-    }
-
-    if (total < 100) {
-      // Para lotes pequenos, tudo vai para inspeção
-      setQtdPcInspecao(String(total));
-    } else {
-      // Para lotes grandes, 30% para inspeção (entre 20 e 50 peças)
-      const sugestao = Math.max(20, Math.min(50, Math.round(total * 0.3)));
-      setQtdPcInspecao(String(sugestao));
-    }
-    setError(null);
-  }, [qtdPc]);
 
   /**
    * Salva o apontamento
@@ -254,11 +231,12 @@ export const useApontamentoModal = ({
       // Busca dados atuais do fluxo
       let fluxoAtual;
       let jaInspecao = 0;
-      
+      let apontamentosFluxo = [];
+
       try {
         fluxoAtual = await supabaseService.getById('exp_pedidos_fluxo', pedido.id);
 
-        const apontamentosFluxo = await supabaseService.getByIndex(
+        apontamentosFluxo = await supabaseService.getByIndex(
           'apontamentos',
           'exp_fluxo_id',
           pedido.id
@@ -266,14 +244,54 @@ export const useApontamentoModal = ({
 
         jaInspecao = Array.isArray(apontamentosFluxo)
           ? apontamentosFluxo
-              .filter(row => row && row.exp_unidade === 'alunica' && row.exp_stage === 'para-inspecao')
-              .reduce((acc, row) => acc + (Number(row.quantidade) || 0), 0)
+            .filter(row => row && row.exp_unidade === 'alunica' && row.exp_stage === 'para-inspecao')
+            .reduce((acc, row) => acc + (Number(row.quantidade) || 0), 0)
           : 0;
       } catch (err) {
         console.error('Erro ao buscar fluxo:', err);
+        setError('Erro ao validar saldo disponível. Tente novamente.');
+        setSaving(false);
+        return;
       }
 
-      // Gera código do lote
+      // VALIDAÇÃO DE CONCORRÊNCIA: Verifica saldo real em tempo real
+      const pcDisponivelReal = toIntegerRound(fluxoAtual?.pc_disponivel) || 0;
+      if (stage === 'para-usinar' && pcs > pcDisponivelReal) {
+        setError(
+          `Saldo insuficiente para este apontamento. ` +
+          `Disponível no momento: ${pcDisponivelReal} pcs. ` +
+          `Tentando apontar: ${pcs} pcs. ` +
+          `Outro operador pode ter apontado simultaneamente.`
+        );
+        setSaving(false);
+        return;
+      }
+
+      // VALIDAÇÃO DE EMBALAGEM: Verifica se há peças disponíveis para embalar
+      if (stage === 'para-embarque') {
+        const lotesParaEmbalagem = Array.isArray(apontamentosFluxo)
+          ? apontamentosFluxo.filter(row =>
+            row && row.exp_unidade === 'alunica' && row.exp_stage === 'para-embarque'
+          )
+          : [];
+        const totalDisponivelEmbalar = lotesParaEmbalagem.reduce(
+          (acc, row) => acc + (Number(row.quantidade) || 0),
+          0
+        );
+
+        if (pcs > totalDisponivelEmbalar) {
+          setError(
+            `Quantidade excede o disponível para embalar. ` +
+            `Disponível: ${totalDisponivelEmbalar} pcs. ` +
+            `Tentando embalar: ${pcs} pcs. ` +
+            `Verifique se todos os lotes foram aprovados.`
+          );
+          setSaving(false);
+          return;
+        }
+      }
+
+      // Gera código base do lote (usado como origem/rastreabilidade)
       const now = new Date();
       const dd = String(now.getDate()).padStart(2, '0');
       const mm = String(now.getMonth() + 1).padStart(2, '0');
@@ -281,7 +299,27 @@ export const useApontamentoModal = ({
       const hh = String(now.getHours()).padStart(2, '0');
       const min = String(now.getMinutes()).padStart(2, '0');
       const pedidoCode = String(pedido?.pedido || pedido?.pedidoSeq || '').trim();
-      const loteCodigo = `${dd}${mm}${yyyy}-${hh}${min}-${pedidoCode}`;
+      const loteBase = `${dd}${mm}${yyyy}-${hh}${min}-${pedidoCode}`;
+
+      const formatSeq = (value) => String(value).padStart(2, '0');
+      const apontList = Array.isArray(apontamentosFluxo) ? apontamentosFluxo : [];
+
+      // ✅ MELHORADO: Contar sequências por estágio de forma mais precisa
+      const countByStageTag = (tag) => apontList.filter((row) => {
+        if (!row || row.exp_unidade !== 'alunica') return false;
+        const base = row.lote_externo || '';
+        return base === loteBase && typeof row.lote === 'string' && row.lote.includes(tag);
+      }).length;
+
+      // ✅ Adicionar timestamp aos sufixos para garantir unicidade
+      const ss = String(now.getSeconds()).padStart(2, '0');
+      const ms = String(now.getMilliseconds()).padStart(3, '0').substring(0, 2);
+      const uniqueSuffix = `${ss}${ms}`;
+
+      const nextInsSeq = countByStageTag('-INS-') + 1;
+      const nextEmbSeq = countByStageTag('-EMB-') + 1;
+      const buildLoteInspecao = () => `${loteBase}-INS-${formatSeq(nextInsSeq)}-${uniqueSuffix}`;
+      const buildLoteEmbalagem = () => `${loteBase}-EMB-${formatSeq(nextEmbSeq)}-${uniqueSuffix}`;
 
       // Monta payload base
       const basePayloadApont = {
@@ -300,7 +338,7 @@ export const useApontamentoModal = ({
         dureza_material: '',
         lotes_externos: [],
         romaneio_numero: '',
-        lote_externo: '',
+        lote_externo: loteBase,
         amarrados_detalhados: null,
         exp_fluxo_id: pedido.id,
         exp_unidade: 'alunica',
@@ -308,32 +346,107 @@ export const useApontamentoModal = ({
       };
 
       const apontamentosToInsert = [];
+      let apontamentosToUpdate = [];
 
-      // Cria apontamentos
-      if (pcsInspecao > 0) {
-        const payloadInspecao = {
-          ...basePayloadApont,
-          exp_fluxo_id: String(pedido.id),
-          exp_unidade: 'alunica',
-          exp_stage: 'para-inspecao',
-          quantidade: pcsInspecao,
-          lote: loteCodigo
-        };
-        apontamentosToInsert.push(payloadInspecao);
-      }
+      // ✅ LÓGICA PARA 3 ESTÁGIOS
 
-      if (pcsEmbalar > 0) {
-        apontamentosToInsert.push({
-          ...basePayloadApont,
-          lote: loteCodigo,
-          quantidade: pcsEmbalar,
-          exp_stage: 'para-embarque'
+      if (stage === 'para-usinar') {
+        // Em "para-usinar": criar apontamentos separados por destino (inspeção vs embalagem)
+        if (pcsInspecao > 0) {
+          const payloadInspecao = {
+            ...basePayloadApont,
+            exp_fluxo_id: String(pedido.id),
+            exp_unidade: 'alunica',
+            exp_stage: 'para-inspecao',  // ✅ Vai para inspeção
+            quantidade: pcsInspecao,
+            lote: buildLoteInspecao()
+          };
+          apontamentosToInsert.push(payloadInspecao);
+        }
+
+        if (pcsEmbalar > 0) {
+          apontamentosToInsert.push({
+            ...basePayloadApont,
+            lote: buildLoteEmbalagem(),
+            quantidade: pcsEmbalar,
+            exp_stage: 'para-embarque'  // ✅ Vai direto para embalagem
+          });
+        }
+      } else if (stage === 'para-inspecao') {
+        // Em "para-inspecao": atualizar apontamento para "para-embarque"
+        // Buscar apontamento em "para-inspecao" com o lote selecionado
+        const lotesInspecao = Array.isArray(apontamentosFluxo)
+          ? apontamentosFluxo.filter(row =>
+            row && row.exp_unidade === 'alunica' && row.exp_stage === 'para-inspecao'
+          )
+          : [];
+
+        if (lotesInspecao.length === 0) {
+          setError('Nenhum material em inspeção encontrado.');
+          setSaving(false);
+          return;
+        }
+
+        // Usar o primeiro lote disponível (ou implementar seletor depois)
+        const loteAtual = lotesInspecao[0];
+        const loteBase = loteAtual.lote_externo || loteAtual.lote;
+        const countEmbSeq = apontList.filter((row) => {
+          if (!row || row.exp_unidade !== 'alunica') return false;
+          const base = row.lote_externo || '';
+          return base === loteBase && typeof row.lote === 'string' && row.lote.includes('-INS-') && row.lote.includes('-EMB-');
+        }).length;
+        const nextEmbSeq = countEmbSeq + 1;
+        const novoLote = `${loteBase}-INS-${formatSeq(nextEmbSeq)}-EMB-01`;
+
+        // Atualizar apontamento para "para-embarque"
+        apontamentosToUpdate.push({
+          id: loteAtual.id,
+          exp_stage: 'para-embarque',
+          lote: novoLote,
+          quantidade: pcs
+        });
+      } else if (stage === 'para-embarque') {
+        // Em "para-embarque": atualizar apontamento para "expedicao-tecno"
+        const lotesEmbalagem = Array.isArray(apontamentosFluxo)
+          ? apontamentosFluxo.filter(row =>
+            row && row.exp_unidade === 'alunica' && row.exp_stage === 'para-embarque'
+          )
+          : [];
+
+        if (lotesEmbalagem.length === 0) {
+          setError('Nenhum material para embalar encontrado.');
+          setSaving(false);
+          return;
+        }
+
+        // Usar o primeiro lote disponível
+        const loteAtual = lotesEmbalagem[0];
+        const loteBase = loteAtual.lote_externo || loteAtual.lote;
+        const countExpSeq = apontList.filter((row) => {
+          if (!row || row.exp_unidade !== 'alunica') return false;
+          const base = row.lote_externo || '';
+          return base === loteBase && typeof row.lote === 'string' && row.lote.includes('-EXP-');
+        }).length;
+        const nextExpSeq = countExpSeq + 1;
+        const novoLote = `${loteBase}-EXP-${formatSeq(nextExpSeq)}`;
+
+        // Atualizar apontamento para "expedicao-tecno"
+        apontamentosToUpdate.push({
+          id: loteAtual.id,
+          exp_stage: 'expedicao-tecno',
+          lote: novoLote,
+          quantidade: pcs
         });
       }
 
       // Insere apontamentos
       for (const apont of apontamentosToInsert) {
         await supabaseService.add('apontamentos', apont);
+      }
+
+      // Atualiza apontamentos (para inspeção e embalagem)
+      for (const apont of apontamentosToUpdate) {
+        await supabaseService.update('apontamentos', apont);
       }
 
       // Recarrega históricos
@@ -353,14 +466,23 @@ export const useApontamentoModal = ({
       const novoKgSaldo = prevKgSaldo + (kg || 0);
       const novoPcSaldo = prevPcSaldo + (pcs || 0);
 
-      await supabaseService.update('exp_pedidos_fluxo', {
+      // ✅ Atualizar alunica_stage se estiver em estágio válido
+      const updatePayload = {
         id: pedido.id,
         kg_disponivel: novoKgDisp,
         pc_disponivel: novoPcDisp,
         saldo_kg_total: novoKgSaldo,
         saldo_pc_total: novoPcSaldo,
         saldo_atualizado_em: agora
-      });
+      };
+
+      // Se estamos em um estágio Alúnica válido, persistir no banco
+      if (['estoque', 'para-usinar', 'para-inspecao', 'para-embarque'].includes(stage)) {
+        updatePayload.alunica_stage = stage;
+        console.log(`[Apontamento] Atualizando alunica_stage para "${stage}"`);
+      }
+
+      await supabaseService.update('exp_pedidos_fluxo', updatePayload);
 
       // Registra movimentação de quantidade
       try {
@@ -421,18 +543,17 @@ export const useApontamentoModal = ({
     fimTouched,
     saving,
     error,
-    
+
     // Setters (para uso direto no componente)
     setQtdPc,
     setQtdPcInspecao,
     setObs,
-    
+
     // Funções
     openModal,
     closeModal,
     handleInicioChange,
     handleFimChange,
-    handleSugerirDistribuicao,
     saveApontamento
   };
 };

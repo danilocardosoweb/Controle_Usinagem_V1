@@ -41,13 +41,16 @@ O Sistema de Controle e Apontamentos da Usinagem é uma aplicação web desenvol
   - Ordens concluídas x pendentes
 - Gráficos dinâmicos para acompanhamento em tempo real
 
-### 4. Relatórios Exportáveis
+### 4. Relatórios Inteligentes
 
-- Produção por período (turno, dia, mês)
+- Produção por período (turno, dia, mês) com **Hora Início, Hora Fim, Duração e Pcs/hora**
 - Relatório de paradas de máquina com classificação
 - Desempenho por operador/máquina
 - **Relatórios por área (Usinagem x Embalagem):** versões específicas dos relatórios de Produção/Desempenho/Produtividade filtrando os apontamentos pela unidade (`apontamentos.exp_unidade`).
 - Exportação em Excel e PDF
+- **Cards de Indicadores (KPIs):** Total de apontamentos, Produção total, Tempo total trabalhado, Produtividade média (pcs/hora), Operadores ativos, Taxa de refugo
+- **Insights Automáticos:** Alertas de taxa de refugo elevada, apontamentos sem hora de término, produtividade abaixo do esperado, metas de produção atingidas
+- **UI Moderna:** Tabelas com destaque visual para métricas importantes, cores indicativas de performance
 
 ### 5. Previsão de Trabalho
 

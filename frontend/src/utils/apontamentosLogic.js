@@ -38,6 +38,7 @@ export const summarizeApontamentos = (apontList, allowedStages = null) => {
     if (!aggregates[loteKey]) {
       aggregates[loteKey] = {
         lote: loteKey,
+        loteExterno: row.lote_externo || null,
         total: 0,
         inspecao: 0,
         embalagem: 0,
@@ -50,6 +51,9 @@ export const summarizeApontamentos = (apontList, allowedStages = null) => {
     const bucket = aggregates[loteKey];
     const qtd = Number(row.quantidade || 0);
     bucket.total += qtd;
+    if (!bucket.loteExterno && row.lote_externo) {
+      bucket.loteExterno = row.lote_externo;
+    }
     
     if (row.exp_stage === 'para-inspecao') bucket.inspecao += qtd;
     if (row.exp_stage === 'para-embarque') bucket.embalagem += qtd;

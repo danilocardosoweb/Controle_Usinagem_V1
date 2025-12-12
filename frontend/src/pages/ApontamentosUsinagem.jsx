@@ -76,7 +76,7 @@ const tryOpenInNewTab = async (url, fallbackPathText) => {
   }
 }
 
-const ApontamentosUsinagem = () => {
+const ApontamentosUsinagem = ({ tituloPagina = 'Apontamentos de Usinagem', subtituloForm = 'Novo Apontamento', modo = 'usinagem' }) => {
   const { user } = useAuth() // Obtendo o usuário logado
   const { items: pedidosDB, loading: carregandoPedidos } = useSupabase('pedidos')
   const { items: apontamentosDB, addItem: addApont, loadItems: recarregarApontamentos } = useSupabase('apontamentos')
@@ -116,7 +116,7 @@ const ApontamentosUsinagem = () => {
     inicio: '',
     fim: '',
     quantidade: '',
-    qtdPedido: '',
+    qtdPedido: 0,
     perfilLongo: '',
     separado: '',
     cliente: '',
@@ -912,10 +912,16 @@ const ApontamentosUsinagem = () => {
   // Extrai o comprimento do acabado a partir do código do produto
   const extrairComprimentoAcabado = (produto) => {
     if (!produto) return ''
-    const resto = String(produto).slice(8) // a partir do 9º dígito (index 8)
-    const match = resto.match(/^\d+/)
-    const valor = match ? parseInt(match[0], 10) : null
-    return Number.isFinite(valor) ? `${valor} mm` : ''
+
+    const produtoStr = String(produto)
+    if (produtoStr.length >= 12) {
+      const comprimento = produtoStr.slice(8, 12)
+      if (/^\d{4}$/.test(comprimento)) {
+        return `${comprimento}mm`
+      }
+    }
+
+    return ''
   }
 
   // Converte um valor datetime-local (YYYY-MM-DDTHH:MM) para Date local
@@ -1069,29 +1075,71 @@ const ApontamentosUsinagem = () => {
   const ordensTrabalhoTodas = pedidosDB
     .filter(p => !p?.finalizado_manual)
     .map(p => {
-    const comp = extrairComprimentoAcabado(p.produto)
+    // Produto completo para cálculo de comprimento (similar aos painéis de EXP)
+    const produtoCompleto = p.produto || getCampoOriginal(p, 'Produto') || getCampoOriginal(p, 'Ferramenta') || ''
+    const comp = extrairComprimentoAcabado(produtoCompleto)
     const ferramenta = extrairFerramenta(p.produto)
+    // Perfil longo e separado podem vir direto da tabela ou da planilha original
+    const perfilLongo = p.item_perfil 
+      || getCampoOriginal(p, 'ITEM.PERFIL') 
+      || getCampoOriginal(p, 'ITEM PERFIL') 
+      || getCampoOriginal(p, 'PERFIL LONGO') 
+      || ''
+    const separadoBruto = p.separado ?? getCampoOriginal(p, 'SEPARADO') ?? 0
+    const separadoNum = Number(String(separadoBruto).replace(/\D/g, '')) || 0
+    // Datas podem estar em DT.FATURA ou DATA ENTREGA na planilha
+    const dtFatura = p.dt_fatura 
+      || getCampoOriginal(p, 'DT.FATURA') 
+      || getCampoOriginal(p, 'DATA ENTREGA') 
+      || ''
+    // Nº OP pode vir de várias colunas na planilha
+    const nroOp = p.nro_op 
+      || getCampoOriginal(p, 'NRO DA OP') 
+      || getCampoOriginal(p, 'Nº OP') 
+      || getCampoOriginal(p, 'OP') 
+      || ''
+
     return {
       id: p.pedido_seq,                  // Ex.: "82594/10"
-      codigoPerfil: p.produto || '',     // Código do produto
+      codigoPerfil: p.produto || '',     // Código do produto (como exibido na carteira)
       descricao: p.descricao || '',      // Descrição do produto
-      quantidadePedido: Number(p.qtd_pedido || 0),      // Quantidade pedida
-      perfilLongo: p.item_perfil || '',  // Item/Perfil
-      separado: p.separado || 0,         // Quantidade separada
+      qtdPedido: Number(p.qtd_pedido || 0),      // Quantidade pedida
+      perfilLongo,                       // Item/Perfil (fallback da planilha)
+      separado: separadoNum,             // Quantidade separada
       cliente: getCampoOriginal(p, 'CLIENTE') || p.cliente || '',
       pedidoCliente: p.pedido_cliente || '',
-      dtFatura: p.dt_fatura || '',
+      dtFatura,
       unidade: p.unidade || '',
       comprimentoAcabado: comp,
       ferramenta,
-      nroOp: p.nro_op || ''
+      nroOp
     }
   })
   
+  // Se estiver no modo "embalagem", exibir apenas pedidos que JÁ POSSUEM apontamentos registrados
+  const ordensComApontamentoSet = useMemo(() => {
+    try {
+      return new Set(
+        (apontamentosDB || [])
+          .map(a => String(a.ordemTrabalho || a.ordem_trabalho || a.pedido_seq || '').trim())
+          .filter(Boolean)
+      )
+    } catch {
+      return new Set()
+    }
+  }, [apontamentosDB])
+
+  const ordensBase = useMemo(() => {
+    if (modo === 'embalagem') {
+      return ordensTrabalhoTodas.filter(o => ordensComApontamentoSet.has(String(o.id)))
+    }
+    return ordensTrabalhoTodas
+  }, [modo, ordensTrabalhoTodas, ordensComApontamentoSet])
+
   // Aplicar filtro de prioridades se ativo
   const ordensTrabalho = filtrarPrioridades 
-    ? ordensTrabalhoTodas.filter(o => pedidosPrioritarios.has(o.id))
-    : ordensTrabalhoTodas
+    ? ordensBase.filter(o => pedidosPrioritarios.has(o.id))
+    : ordensBase
 
   // Caminhos base para PDFs salvos em Configurações
   const pdfBasePath = typeof window !== 'undefined' ? (localStorage.getItem('pdfBasePath') || '') : ''
@@ -1294,6 +1342,14 @@ const ApontamentosUsinagem = () => {
       }
     }
 
+    // Campos extras para manter rastreabilidade por unidade/estágio sem criar novas tabelas
+    const expFields = (modo === 'embalagem')
+      ? {
+          exp_unidade: 'embalagem',
+          exp_stage: 'para-embarque'
+        }
+      : {}
+
     const payloadDB = {
       operador: formData.operador || (user ? user.nome : ''),
       maquina: formData.maquina || '',
@@ -1319,6 +1375,7 @@ const ApontamentosUsinagem = () => {
       lote_externo: formData.loteExterno || '',
       // NOVO: Detalhes completos dos amarrados para rastreabilidade
       amarrados_detalhados: amarradosDetalhados.length > 0 ? amarradosDetalhados : null,
+      ...expFields
     }
     try {
       await addApont(payloadDB)
@@ -1449,11 +1506,11 @@ const ApontamentosUsinagem = () => {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-800">Apontamentos de Usinagem</h1>
+      <h1 className="text-2xl font-bold text-gray-800">{tituloPagina}</h1>
       
       <div className="bg-white rounded-lg shadow p-4 form-compact">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-700">Novo Apontamento</h2>
+          <h2 className="text-lg font-semibold text-gray-700">{subtituloForm}</h2>
           {formData.ordemTrabalho && (
             <div className="flex items-center gap-2">
               <div

@@ -2,6 +2,48 @@ import { useState, useCallback } from 'react';
 import supabaseService from '../services/SupabaseService';
 import { toIntegerRound } from '../utils/expUsinagem';
 
+const LOTE_STAGE_TAGS = {
+  INSP: 'INS',
+  EMB: 'EMB'
+};
+
+const normalizeLoteBase = (row) => {
+  if (!row) return null;
+  if (row.lote_externo) return row.lote_externo;
+  if (typeof row.lote === 'string') {
+    const match = row.lote.match(/-(INS|EMB)-\d+$/);
+    if (match) {
+      return row.lote.slice(0, match.index);
+    }
+    return row.lote;
+  }
+  return null;
+};
+
+const buildSeqMapFromApontamentos = (list = []) => {
+  const map = {};
+  list.forEach((row) => {
+    const base = normalizeLoteBase(row);
+    if (!base || typeof row.lote !== 'string') return;
+    const match = row.lote.match(/-(INS|EMB)-(\d+)$/);
+    if (!match) return;
+    const [, tag, seq] = match;
+    const key = `${base}|${tag}`;
+    const curr = map[key] || 0;
+    const parsed = Number.parseInt(seq, 10);
+    map[key] = Number.isNaN(parsed) ? curr : Math.max(curr, parsed);
+  });
+  return map;
+};
+
+const buildNextLoteCode = (seqMap, base, tag) => {
+  if (!base || !tag) return null;
+  const key = `${base}|${tag}`;
+  const next = (seqMap[key] || 0) + 1;
+  seqMap[key] = next;
+  return `${base}-${tag}-${String(next).padStart(2, '0')}`;
+};
+
 /**
  * Hook customizado para gerenciar modais de Aprovação e Reabertura da Alúnica
  * 
@@ -74,13 +116,20 @@ const useAlunicaModals = ({
       const loteMap = {};
       rows.forEach((row) => {
         const lote = row.lote || '(sem lote)';
+        const loteBase = normalizeLoteBase(row) || lote;
         const qty = toIntegerRound(row.quantidade) || 0;
-        loteMap[lote] = (loteMap[lote] || 0) + qty;
+        const key = `${lote}|${loteBase}`;
+        loteMap[key] = {
+          lote,
+          loteBase,
+          disponivel: (loteMap[key]?.disponivel || 0) + qty
+        };
       });
       
-      const itens = Object.entries(loteMap).map(([lote, disponivel]) => ({
-        lote,
-        disponivel,
+      const itens = Object.values(loteMap).map((entry) => ({
+        lote: entry.lote,
+        loteBase: entry.loteBase,
+        disponivel: entry.disponivel,
         mover: 0
       }));
       
@@ -145,6 +194,7 @@ const useAlunicaModals = ({
     try {
       const apontList = await supabaseService.getByIndex('apontamentos', 'exp_fluxo_id', id);
       const stageAtual = alunicaStages[id] || 'para-inspecao';
+      const seqMap = buildSeqMapFromApontamentos(apontList);
       
       let sumDisp = 0;
       let sumMov = 0;
@@ -168,12 +218,16 @@ const useAlunicaModals = ({
         
         for (const row of rows) {
           const q = toIntegerRound(row.quantidade) || 0;
+          const loteBase = normalizeLoteBase(row) || item.loteBase || row.lote || '(sem lote)';
+          const novoLote = buildNextLoteCode(seqMap, loteBase, LOTE_STAGE_TAGS.EMB) || row.lote;
           
           if (qtyToMove >= q) {
             // Move registro completo
             await supabaseService.update('apontamentos', { 
               id: row.id, 
-              exp_stage: 'para-embarque' 
+              exp_stage: 'para-embarque',
+              lote: novoLote,
+              lote_externo: loteBase
             });
             qtyToMove -= q;
           } else if (qtyToMove > 0) {
@@ -188,7 +242,9 @@ const useAlunicaModals = ({
             const novo = { 
               ...copy, 
               quantidade: qtyToMove, 
-              exp_stage: 'para-embarque' 
+              exp_stage: 'para-embarque',
+              lote: novoLote,
+              lote_externo: loteBase
             };
             await supabaseService.add('apontamentos', novo);
             qtyToMove = 0;
@@ -260,10 +316,16 @@ const useAlunicaModals = ({
           )
         : [];
       
+      const seqMap = buildSeqMapFromApontamentos(apontList);
+
       for (const row of rows) {
+        const loteBase = normalizeLoteBase(row) || row.lote || '(sem lote)';
+        const novoLote = buildNextLoteCode(seqMap, loteBase, LOTE_STAGE_TAGS.EMB) || row.lote;
         await supabaseService.update('apontamentos', { 
           id: row.id, 
-          exp_stage: 'para-embarque' 
+          exp_stage: 'para-embarque',
+          lote: novoLote,
+          lote_externo: loteBase
         });
       }
 
@@ -329,13 +391,20 @@ const useAlunicaModals = ({
       const loteMap = {};
       rows.forEach((row) => {
         const lote = row.lote || '(sem lote)';
+        const loteBase = normalizeLoteBase(row) || lote;
         const qty = toIntegerRound(row.quantidade) || 0;
-        loteMap[lote] = (loteMap[lote] || 0) + qty;
+        const key = `${lote}|${loteBase}`;
+        loteMap[key] = {
+          lote,
+          loteBase,
+          disponivel: (loteMap[key]?.disponivel || 0) + qty
+        };
       });
       
-      const itens = Object.entries(loteMap).map(([lote, disponivel]) => ({
-        lote,
-        disponivel,
+      const itens = Object.values(loteMap).map((entry) => ({
+        lote: entry.lote,
+        loteBase: entry.loteBase,
+        disponivel: entry.disponivel,
         mover: 0
       }));
       
@@ -400,6 +469,7 @@ const useAlunicaModals = ({
     try {
       const apontList = await supabaseService.getByIndex('apontamentos', 'exp_fluxo_id', id);
       const stageAtual = alunicaStages[id] || 'para-embarque';
+      const seqMap = buildSeqMapFromApontamentos(apontList);
       
       let sumDisp = 0;
       let sumMov = 0;
@@ -423,12 +493,16 @@ const useAlunicaModals = ({
         
         for (const row of rows) {
           const q = toIntegerRound(row.quantidade) || 0;
+          const loteBase = normalizeLoteBase(row) || item.loteBase || row.lote || '(sem lote)';
+          const novoLote = buildNextLoteCode(seqMap, loteBase, LOTE_STAGE_TAGS.INSP) || row.lote;
           
           if (qtyToMove >= q) {
             // Move registro completo
             await supabaseService.update('apontamentos', { 
               id: row.id, 
-              exp_stage: 'para-inspecao' 
+              exp_stage: 'para-inspecao',
+              lote: novoLote,
+              lote_externo: loteBase
             });
             qtyToMove -= q;
           } else if (qtyToMove > 0) {
@@ -443,7 +517,9 @@ const useAlunicaModals = ({
             const novo = { 
               ...copy, 
               quantidade: qtyToMove, 
-              exp_stage: 'para-inspecao' 
+              exp_stage: 'para-inspecao',
+              lote: novoLote,
+              lote_externo: loteBase
             };
             await supabaseService.add('apontamentos', novo);
             qtyToMove = 0;
@@ -515,10 +591,16 @@ const useAlunicaModals = ({
           )
         : [];
       
+      const seqMap = buildSeqMapFromApontamentos(apontList);
+
       for (const row of rows) {
+        const loteBase = normalizeLoteBase(row) || row.lote || '(sem lote)';
+        const novoLote = buildNextLoteCode(seqMap, loteBase, LOTE_STAGE_TAGS.INSP) || row.lote;
         await supabaseService.update('apontamentos', { 
           id: row.id, 
-          exp_stage: 'para-inspecao' 
+          exp_stage: 'para-inspecao',
+          lote: novoLote,
+          lote_externo: loteBase
         });
       }
 

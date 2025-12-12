@@ -186,6 +186,9 @@ Parâmetros por ferramenta para estimativas de expedição.
 - `ripas_por_pallet`: Ripas por pallet.
 - `embalagem`: 'pallet' | 'caixa'.
 - `pcs_por_caixa`: Peças por caixa (quando embalagem = 'caixa').
+- `vida_util_dias`: Vida útil estimada em dias (para alertas de troca).
+- `ultima_troca`: Data/hora da última troca (timestamptz).
+- `responsavel`: Responsável pela ferramenta.
 - `created_at`: Data de criação.
 
 ## Tabela: `exp_pedidos_fluxo`
@@ -208,6 +211,83 @@ Pedidos selecionados para acompanhamento na aba EXP - Usinagem.
 - `dados_originais`: Payload JSON com dados de origem.
 - `selecionado_por`: Usuário responsável pela inclusão no fluxo.
 - `selecionado_em` / `criado_em` / `atualizado_em`: Timestamps em UTC.
+
+## Tabela: `exp_estoque_baixas`
+Registro de baixas de estoque com rastreabilidade por lote.
+- `id`: UUID gerado automaticamente.
+- `fluxo_id`: Referência para `exp_pedidos_fluxo`.
+- `lote_codigo`: Código do lote específico (ex: `20112025-1430-78914/10-EMB-01`).
+- `tipo_baixa`: Tipo de baixa - `'consumo'` (uso interno) ou `'venda'` (saída comercial).
+- `quantidade_pc`: Quantidade baixada em peças.
+- `quantidade_kg`: Quantidade baixada em quilogramas.
+- `observacao`: Justificativa ou detalhes da baixa.
+- `baixado_por`: Usuário que realizou a baixa.
+- `baixado_em`: Timestamp da baixa (UTC).
+- `estornado`: Indica se a baixa foi estornada (`TRUE`/`FALSE`).
+- `estornado_por`: Usuário que estornou a baixa.
+- `estornado_em`: Timestamp do estorno (UTC).
+- `motivo_estorno`: Justificativa para o estorno.
+- `created_at`: Timestamp de criação (UTC).
+
+**Índices:**
+- `idx_baixas_fluxo` em `fluxo_id`
+- `idx_baixas_lote` em `lote_codigo`
+- `idx_baixas_tipo` em `tipo_baixa`
+- `idx_baixas_data` em `baixado_em`
+- `idx_baixas_estornado` em `estornado` (WHERE `estornado = FALSE`)
+
+**Propósito:**
+Permite rastrear consumo/venda de lotes específicos, mantendo rastreabilidade completa desde a usinagem até a baixa. Suporta estorno de baixas com justificativa.
+
+## Tabela: `exp_insumos`
+Catálogo de insumos de estoque.
+- `id`: UUID gerado automaticamente.
+- `nome`: Nome do insumo.
+- `categoria`: Categoria (opcional).
+- `qtd_atual`: Campo legado (não é a fonte de verdade quando há movimentos).
+- `qtd_minima`: Estoque mínimo para alertas.
+- `unidade`: Unidade de medida.
+- `foto_url`: URL da foto do item (vinculada ao insumo).
+- `criado_por`, `criado_em`, `atualizado_em`: Metadados.
+
+## Tabela: `exp_insumos_mov`
+Movimentações de insumos (fonte de verdade para saldo).
+- `id`: UUID.
+- `insumo_id`: Referência opcional para `exp_insumos`.
+- `nome`: Nome do insumo.
+- `categoria`: Categoria (opcional).
+- `tipo`: `entrada` | `saida` | `ajuste`.
+- `quantidade`: Quantidade movimentada (> 0).
+- `unidade`: Unidade.
+- `motivo`, `maquina`, `responsavel`, `observacao`: Rastreabilidade.
+- `created_at`: Timestamp.
+
+## Tabela: `exp_ferramentas_mov`
+Movimentações de ferramentas (troca/consumo/entrada/perda).
+- `id`: UUID.
+- `ferramenta`: Código/nome.
+- `categoria`: Categoria (opcional).
+- `tipo`: `entrada` | `consumo` | `troca` | `ajuste` | `perda`.
+- `quantidade`: Quantidade movimentada (> 0).
+- `unidade`: Unidade.
+- `motivo`, `maquina`, `responsavel`, `observacao`: Rastreabilidade.
+- `created_at`: Timestamp.
+
+## View: `vw_insumos_saldo`
+Saldo por insumo calculado a partir de `exp_insumos_mov`.
+- `saldo` = entradas - saídas + ajustes.
+
+## View: `vw_insumos_consumo_30d`
+Consumo (saídas) de insumos nos últimos 30 dias.
+
+## View: `vw_ferramentas_consumo_30d`
+Consumo de ferramentas nos últimos 30 dias.
+
+## View: `vw_ferramentas_status`
+Status de vida útil de ferramentas (ativa/atenção/para trocar) baseado em `ferramentas_cfg`.
+
+## View: `vw_insumos_reposicao`
+Sugestão de reposição quando saldo <= mínimo.
 
 ## Tabela: `exp_pedidos_movimentacoes`
 Histórico de movimentações do fluxo EXP - Usinagem.

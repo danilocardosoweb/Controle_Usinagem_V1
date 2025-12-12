@@ -1,4 +1,5 @@
 # Log de Alterações
+[12/12/2025 10:25] - [Frontend] - [Relatórios Inteligentes: cards de indicadores (produção, tempo, produtividade, refugo), insights automáticos, colunas de tempo (Início/Fim/Duração/Pcs por hora) nos relatórios de produção, UI modernizada] - [Cascade]
 [12/12/2025 09:24] - [Frontend] - [Estoque: Status de Ferramentas editável (vida útil, última troca, responsável) via modal] - [Cascade]
 [12/12/2025 09:09] - [Frontend] - [Estoque: edição de estoque mínimo (Itens Acabados via configuracoes e Insumos via qtd_minima)] - [Cascade]
 [12/12/2025 09:07] - [Frontend] - [Estoque: campo Máquina/Setor e Máquina agora usam lista de máquinas cadastradas (tabela maquinas)] - [Cascade]
