@@ -18,6 +18,20 @@ O Sistema de Controle e Apontamentos da Usinagem é uma aplicação web desenvol
   - Quantidade produzida
   - Observações
 
+### 2.1 Apontamentos da Embalagem (com etapas)
+
+- A aba "Apontamentos da Embalagem" reutiliza a estrutura de apontamentos, porém permite registrar etapas distintas do processo.
+- O sistema pergunta ao usuário o tipo de processo:
+  - **Somente Embalagem**
+  - **Rebarbar/Limpeza + Embalagem**
+- Quando o processo envolve duas etapas, o usuário seleciona a **Etapa** a ser apontada:
+  - `REBARBAR_LIMPEZA`
+  - `EMBALAGEM`
+- Cada etapa é registrada como um apontamento separado, permitindo:
+  - Operador e máquina diferentes por etapa
+  - Apontamentos em dias/horários distintos
+- **Regras de cálculo:** para evitar duplicidade de produção, os indicadores de "Qtd. Apontada" e "Saldo" na Embalagem consideram apenas os apontamentos com etapa `EMBALAGEM` (ou apontamentos legados sem etapa).
+
 #### Comportamentos automáticos
 - Ao selecionar um pedido (via combo "Pedido/Seq" ou pelo modal de busca), o campo "Início" é preenchido automaticamente com a data/hora local atual no formato aceito por inputs `datetime-local` (AAAA-MM-DDTHH:MM).
 - Se o campo "Início" já tiver um valor, ele é preservado (não sobrescreve).
@@ -139,10 +153,42 @@ O Sistema de Controle e Apontamentos da Usinagem é uma aplicação web desenvol
   - Verifica produção completa antes de permitir finalização do pedido
   - Mensagens descritivas indicam o motivo do bloqueio
 
-### 6. Integração da Carteira de Encomendas
+### 7. Correção de Apontamentos (Auditoria)
+
+- **Acesso:** Apenas administradores podem corrigir apontamentos
+- **Funcionalidades:**
+  - Modal interativo para editar campos de apontamentos (quantidade, data/hora, operador, máquina, rack/pallet, observações)
+  - Rastreamento automático de campos alterados
+  - Motivo obrigatório para justificar a correção
+  - Histórico completo de todas as correções com timeline visual
+  - Suporte a reversão de correções com justificativa
+- **Auditoria:**
+  - Tabela `apontamentos_correcoes` armazena dados anteriores e novos em JSONB
+  - Registro de quem corrigiu, quando e por quê
+  - RLS policies garantem que apenas admin possa inserir/atualizar correções
+  - Supervisores podem visualizar histórico de correções
+- **UI:**
+  - Botão "🔧 Corrigir" visível apenas para admin na tabela de apontamentos
+  - Modal com duas abas: "Corrigir" (edição) e "Histórico" (auditoria)
+  - Campos alterados destacados em laranja com valores originais visíveis
+  - Resumo de alterações antes de salvar
+
+### 8. Integração da Carteira de Encomendas
 
 - Upload de arquivo Excel contendo os itens de usinagem
 - Carregamento automático dos dados para alimentar os apontamentos
+
+### 9. Manual do Usuário
+
+- Página geral acessível pelo menu lateral em **"Manual do Usuário"**.
+- Objetivo: orientar usuários iniciantes sobre os fluxos principais do sistema.
+- Conteúdo inclui instruções para:
+  - Apontamentos de Usinagem
+  - Apontamentos de Embalagem (incluindo fluxo por etapas)
+  - Apontamentos de Paradas
+  - Relatórios
+  - Estoque
+  - Correção de apontamentos (admin)
 
 ## Arquitetura do Sistema
 

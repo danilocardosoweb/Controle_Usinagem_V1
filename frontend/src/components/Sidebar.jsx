@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
-import { FaCog, FaChartBar, FaClipboardList, FaTools, FaFileAlt, FaTachometerAlt, FaBars, FaTimes, FaClock, FaTasks, FaCogs, FaBoxOpen, FaWarehouse } from 'react-icons/fa'
+import { FaCog, FaChartBar, FaClipboardList, FaTools, FaFileAlt, FaTachometerAlt, FaBars, FaTimes, FaClock, FaTasks, FaCogs, FaBoxOpen, FaWarehouse, FaQuestionCircle } from 'react-icons/fa'
 import { useAuth } from '../contexts/AuthContext'
 import logoTecno from '../assets/LogoTecno.png'
 import logoTecnoSemFundo from '../assets/LogoTecnoRedeSocial-SemFundo.png'
@@ -22,6 +22,7 @@ const Sidebar = ({ isOpen, onToggle, onClose, isMobile }) => {
     { path: '/previsao-trabalho', name: 'Previsão Trab.', icon: <FaClock />, roles: ['admin', 'supervisor', 'operador'] },
     { path: '/pcp', name: 'PCP', icon: <FaTasks />, roles: ['admin', 'supervisor'] },
     { path: '/configuracoes', name: 'Configurações', icon: <FaCog />, roles: ['admin'] }, // ✅ Apenas admin
+    { path: '/manual', name: 'Manual do Usuário', icon: <FaQuestionCircle />, roles: ['admin', 'supervisor', 'operador'] },
   ]
 
   // Filtrar itens do menu baseado no role do usuário

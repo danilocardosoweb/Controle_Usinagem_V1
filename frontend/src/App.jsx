@@ -13,6 +13,7 @@ import PrevisaoTrabalho from './pages/PrevisaoTrabalho'
 import Configuracoes from './pages/Configuracoes'
 import Pedidos from './pages/Pedidos'
 import PCP from './pages/PCP'
+import ManualUsuario from './pages/ManualUsuario'
 import Layout from './components/Layout'
 import ProtectedRoute from './components/ProtectedRoute'
 import ToastContainer from './components/ToastContainer'
@@ -53,6 +54,7 @@ function App() {
         <Route path="previsao-trabalho" element={<PrevisaoTrabalho />} />
         {/** Rota removida: EXP - Usinagem desativada */}
         <Route path="pcp" element={<PCP />} />
+        <Route path="manual" element={<ManualUsuario />} />
         <Route path="configuracoes" element={
           <ProtectedRoute allowedRoles={['admin']}>
             <Configuracoes />
